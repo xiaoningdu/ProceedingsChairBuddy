@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
 import re
 import shutil
 import cgi
@@ -10,15 +11,16 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote
 
-from proceeding_chair_app.checks import build_submission_records
+from proceeding_chair_app.checks import CHECKLIST_IDS, CHECKLIST_ITEMS, build_submission_records
 from proceeding_chair_app.parsers import ensure_sample_pdfs, load_hotcrp_html, load_xml_papers
 
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
-TRACKS_PATH = ROOT / "tracks.json"
-STATE_DIR = ROOT / "review_state"
-TRACK_DATA_DIR = ROOT / "track_data"
+DATA_DIR = Path(os.environ.get("PCB_DATA_DIR", ROOT)).resolve()
+TRACKS_PATH = DATA_DIR / "tracks.json"
+STATE_DIR = DATA_DIR / "review_state"
+TRACK_DATA_DIR = DATA_DIR / "track_data"
 
 
 def load_tracks_config() -> list[dict]:
@@ -41,7 +43,8 @@ def default_track_id() -> str:
 
 
 def track_path(track: dict, key: str) -> Path:
-    return ROOT / track[key]
+    path = Path(track[key])
+    return path if path.is_absolute() else DATA_DIR / path
 
 
 def load_track_state(track_id: str) -> dict:
@@ -61,7 +64,24 @@ def save_track_state(track_id: str, state: dict) -> None:
 
 
 def save_tracks_config(tracks: list[dict]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     TRACKS_PATH.write_text(json.dumps({"tracks": tracks}, indent=2), encoding="utf-8")
+
+
+def parse_checklist_ids(values: object, default_all: bool = True) -> list[str]:
+    if values is None:
+        return list(CHECKLIST_IDS) if default_all else []
+    if isinstance(values, str):
+        raw_values = [item.strip() for item in values.split(",") if item.strip()]
+    elif isinstance(values, list):
+        raw_values = [str(item).strip() for item in values if str(item).strip()]
+    else:
+        raw_values = []
+    unknown = sorted(set(raw_values) - set(CHECKLIST_IDS))
+    if unknown:
+        raise ValueError("Unknown checklist item: " + ", ".join(unknown))
+    selected = set(raw_values)
+    return [check_id for check_id in CHECKLIST_IDS if check_id in selected]
 
 
 def add_track(payload: dict) -> dict:
@@ -79,10 +99,19 @@ def add_track(payload: dict) -> dict:
     if any(track.get("id") == track_id for track in tracks):
         raise ValueError("Track ID already exists")
     for file_key, file_path in [("xml", xml), ("html", html), ("zip", zip_path)]:
-        if not (ROOT / file_path).is_file():
+        if not track_path({file_key: file_path}, file_key).is_file():
             raise ValueError(f"{file_key} file does not exist")
-    (ROOT / pdf_dir).mkdir(parents=True, exist_ok=True)
-    track = {"id": track_id, "name": name, "xml": xml, "html": html, "zip": zip_path, "pdf_dir": pdf_dir}
+    track_path({"pdf_dir": pdf_dir}, "pdf_dir").mkdir(parents=True, exist_ok=True)
+    checklist_ids = parse_checklist_ids(payload.get("checklist_ids"))
+    track = {
+        "id": track_id,
+        "name": name,
+        "xml": xml,
+        "html": html,
+        "zip": zip_path,
+        "pdf_dir": pdf_dir,
+        "checklist_ids": checklist_ids,
+    }
     tracks.append(track)
     save_tracks_config(tracks)
     return {"ok": True, "track": track}
@@ -112,6 +141,10 @@ def add_track_upload(fields: dict, files: dict) -> dict:
     for key in ["zip", "xml", "html"]:
         saved_paths[key] = _save_uploaded_file(files[key], input_dir)
 
+    checklist_ids = parse_checklist_ids(
+        fields.get("checklist_ids"),
+        default_all="checklist_ids_present" not in fields,
+    )
     track = {
         "id": track_id,
         "name": name,
@@ -119,6 +152,7 @@ def add_track_upload(fields: dict, files: dict) -> dict:
         "html": _relative_path(saved_paths["html"]),
         "zip": _relative_path(saved_paths["zip"]),
         "pdf_dir": _relative_path(pdf_dir),
+        "checklist_ids": checklist_ids,
     }
     tracks.append(track)
     save_tracks_config(tracks)
@@ -143,7 +177,7 @@ def _safe_filename(filename: str) -> str:
 
 
 def _relative_path(path: Path) -> str:
-    return str(path.relative_to(ROOT))
+    return str(path.relative_to(DATA_DIR))
 
 
 def re_match_track_id(track_id: str) -> bool:
@@ -160,7 +194,8 @@ def load_track_data(track_id: str) -> dict:
     ensure_sample_pdfs(zip_path, pdf_dir)
     xml_papers = load_xml_papers(track_path(track, "xml"))
     html_papers, global_messages = load_hotcrp_html(track_path(track, "html"))
-    records = build_submission_records(xml_papers, html_papers, pdf_dir)
+    checklist_ids = parse_checklist_ids(track.get("checklist_ids"))
+    records = build_submission_records(xml_papers, html_papers, pdf_dir, checklist_ids)
     sample_ids = {
         match.group(1)
         for path in pdf_dir.glob("*.pdf")
@@ -191,6 +226,7 @@ def load_track_data(track_id: str) -> dict:
         "track": {
             "id": track["id"],
             "name": track["name"],
+            "checklist_ids": checklist_ids,
         },
         "submissions": records,
         "global_messages": global_messages,
@@ -265,6 +301,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._serve_file(STATIC_DIR / "styles.css", "text/css; charset=utf-8")
         elif self.path == "/app.js":
             self._serve_file(STATIC_DIR / "app.js", "application/javascript; charset=utf-8")
+        elif self.path == "/api/checklist-items":
+            self._serve_json({"items": CHECKLIST_ITEMS})
         elif self.path == "/api/tracks":
             self._serve_json(load_tracks_summary())
         elif self.path.startswith("/api/tracks/") and self.path.endswith("/pdf"):
@@ -341,7 +379,11 @@ class Handler(SimpleHTTPRequestHandler):
         for key in form.keys():
             item = form[key]
             if isinstance(item, list):
-                item = item[0]
+                if item and item[0].filename:
+                    files[key] = item[0]
+                else:
+                    fields[key] = [field.value for field in item]
+                continue
             if item.filename:
                 files[key] = item
             else:
@@ -381,8 +423,10 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main() -> None:
-    server = ThreadingHTTPServer(("127.0.0.1", 8765), Handler)
-    print("Proceedings Chair Buddy running at http://127.0.0.1:8765")
+    host = os.environ.get("PCB_HOST", "127.0.0.1")
+    port = int(os.environ.get("PCB_PORT", "8765"))
+    server = ThreadingHTTPServer((host, port), Handler)
+    print(f"Proceedings Chair Buddy running at http://{host}:{port}")
     server.serve_forever()
 
 

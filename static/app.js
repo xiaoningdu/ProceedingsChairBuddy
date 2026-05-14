@@ -1,5 +1,27 @@
+const DEFAULT_CHECKLIST_ITEMS = [
+  {id: "title_pdf_vs_xml", label: "PDF title matches metadata"},
+  {id: "authors_pdf_vs_xml", label: "PDF author list matches metadata"},
+  {id: "affiliations_pdf_vs_xml", label: "PDF affiliations match metadata"},
+  {id: "emails_in_pdf", label: "All author emails in metadata appear in the PDF"},
+  {id: "orcid", label: "All authors have ORCID in metadata"},
+  {id: "hotcrp_acm_keywords", label: "ACM keywords added on HotCRP"},
+  {id: "hotcrp_ccs", label: "ACM Computing Classification added on HotCRP"},
+  {id: "hotcrp_references", label: "References added on HotCRP"},
+  {id: "source_files", label: "Source files submitted"},
+  {id: "proceeding_messages", label: "Other issues"},
+  {id: "pdf_copyright_isbn", label: "PDF copyright information includes ISBN"},
+  {id: "page_count", label: "Page count available and locally consistent"},
+  {id: "pdf_exists", label: "Paper PDF provided"},
+  {id: "pdf_page_numbers", label: "PDF has no visible page numbers"},
+  {id: "latest_acm_template", label: "Latest ACM template used"},
+  {id: "authors_stacked", label: "Authors stacked individually"},
+  {id: "last_page_balanced", label: "Last page balanced"},
+  {id: "track_page_limit", label: "Track-specific page limit followed"}
+];
+
 let state = {
   tracks: [],
+  checklistItems: DEFAULT_CHECKLIST_ITEMS,
   currentTrack: null,
   submissions: [],
   selectedId: null,
@@ -12,6 +34,8 @@ const els = {
   trackList: document.querySelector("#trackList"),
   addTrackForm: document.querySelector("#addTrackForm"),
   addTrackMessage: document.querySelector("#addTrackMessage"),
+  addTrackChecklist: document.querySelector("#addTrackChecklist"),
+  selectAllChecks: document.querySelector("#selectAllChecks"),
   sourceSummary: document.querySelector("#sourceSummary"),
   submissionCount: document.querySelector("#submissionCount"),
   submissionList: document.querySelector("#submissionList"),
@@ -29,7 +53,24 @@ const els = {
 };
 
 async function init() {
-  await loadTracks();
+  renderAddTrackChecklist();
+  await Promise.all([loadChecklistItems(), loadTracks()]);
+}
+
+async function loadChecklistItems() {
+  try {
+    const response = await fetch("/api/checklist-items");
+    if (!response.ok) {
+      return;
+    }
+    const data = await response.json();
+    if (Array.isArray(data.items) && data.items.length) {
+      state.checklistItems = data.items;
+      renderAddTrackChecklist();
+    }
+  } catch (error) {
+    // Keep the built-in checklist options available if the metadata endpoint is unavailable.
+  }
 }
 
 async function loadTracks() {
@@ -53,11 +94,51 @@ async function addTrack(event) {
       throw new Error(await response.text());
     }
     els.addTrackForm.reset();
+    syncSelectAllChecks();
+    const panel = els.addTrackForm.closest(".addTrackPanel");
+    if (panel) {
+      panel.open = false;
+    }
     els.addTrackMessage.textContent = "Track added.";
     await loadTracks();
   } catch (error) {
     els.addTrackMessage.textContent = cleanErrorMessage(error.message);
   }
+}
+
+function renderAddTrackChecklist() {
+  const selectedIds = new Set(addTrackChecklistInputs().filter(input => input.checked).map(input => input.value));
+  const hadRenderedItems = addTrackChecklistInputs().length > 0;
+  els.addTrackChecklist.replaceChildren(...state.checklistItems.map(item => {
+    const label = document.createElement("label");
+    label.className = "checklistOption";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "checklist_ids";
+    input.value = item.id;
+    input.checked = hadRenderedItems ? selectedIds.has(item.id) : true;
+    input.defaultChecked = true;
+    input.addEventListener("change", syncSelectAllChecks);
+
+    const text = document.createElement("span");
+    text.textContent = item.label;
+
+    label.append(input, text);
+    return label;
+  }));
+  syncSelectAllChecks();
+}
+
+function addTrackChecklistInputs() {
+  return Array.from(els.addTrackChecklist.querySelectorAll('input[name="checklist_ids"]'));
+}
+
+function syncSelectAllChecks() {
+  const inputs = addTrackChecklistInputs();
+  const checkedCount = inputs.filter(input => input.checked).length;
+  els.selectAllChecks.checked = inputs.length > 0 && checkedCount === inputs.length;
+  els.selectAllChecks.indeterminate = checkedCount > 0 && checkedCount < inputs.length;
 }
 
 function cleanErrorMessage(message) {
@@ -440,6 +521,13 @@ els.backToTracks.addEventListener("click", async () => {
 });
 els.exportCsv.addEventListener("click", exportCsv);
 els.addTrackForm.addEventListener("submit", addTrack);
+els.addTrackForm.addEventListener("reset", () => setTimeout(syncSelectAllChecks, 0));
+els.selectAllChecks.addEventListener("change", () => {
+  for (const input of addTrackChecklistInputs()) {
+    input.checked = els.selectAllChecks.checked;
+  }
+  syncSelectAllChecks();
+});
 init().catch(error => {
   els.sourceSummary.textContent = `Failed to load prototype data: ${error.message}`;
 });

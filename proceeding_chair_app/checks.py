@@ -8,11 +8,37 @@ from typing import Dict, List, Optional
 from .parsers import HtmlPaper, XmlPaper, extract_pdf_text, pdf_page_count
 
 
+CHECKLIST_ITEMS = [
+    {"id": "title_pdf_vs_xml", "label": "PDF title matches metadata", "source": "PDF + XML"},
+    {"id": "authors_pdf_vs_xml", "label": "PDF author list matches metadata", "source": "PDF + XML"},
+    {"id": "affiliations_pdf_vs_xml", "label": "PDF affiliations match metadata", "source": "PDF + XML"},
+    {"id": "emails_in_pdf", "label": "All author emails in metadata appear in the PDF", "source": "PDF + XML"},
+    {"id": "orcid", "label": "All authors have ORCID in metadata", "source": "XML"},
+    {"id": "hotcrp_acm_keywords", "label": "ACM keywords added on HotCRP", "source": "HotCRP ACM HTML"},
+    {"id": "hotcrp_ccs", "label": "ACM Computing Classification added on HotCRP", "source": "HotCRP ACM HTML"},
+    {"id": "hotcrp_references", "label": "References added on HotCRP", "source": "HotCRP ACM HTML"},
+    {"id": "source_files", "label": "Source files submitted", "source": "HotCRP ACM HTML"},
+    {"id": "proceeding_messages", "label": "Other issues", "source": "HotCRP ACM HTML"},
+    {"id": "pdf_copyright_isbn", "label": "PDF copyright information includes ISBN", "source": "PDF"},
+    {"id": "page_count", "label": "Page count available and locally consistent", "source": "HotCRP ACM HTML + PDF"},
+    {"id": "pdf_exists", "label": "Paper PDF provided", "source": "ZIP"},
+    {"id": "pdf_page_numbers", "label": "PDF has no visible page numbers", "source": "PDF"},
+    {"id": "latest_acm_template", "label": "Latest ACM template used", "source": "PDF + HotCRP"},
+    {"id": "authors_stacked", "label": "Authors stacked individually", "source": "PDF"},
+    {"id": "last_page_balanced", "label": "Last page balanced", "source": "PDF"},
+    {"id": "track_page_limit", "label": "Track-specific page limit followed", "source": "HotCRP + rules"},
+]
+
+CHECKLIST_IDS = [item["id"] for item in CHECKLIST_ITEMS]
+
+
 def build_submission_records(
     xml_papers: Dict[str, XmlPaper],
     html_papers: Dict[str, HtmlPaper],
     pdf_dir: Path,
+    enabled_check_ids: Optional[List[str]] = None,
 ) -> List[Dict]:
+    enabled_check_id_set = set(enabled_check_ids) if enabled_check_ids is not None else None
     ids = sorted(set(xml_papers) | set(html_papers) | set(_pdf_ids(pdf_dir)), key=lambda pid: int(pid))
     records: List[Dict] = []
     for paper_id in ids:
@@ -22,6 +48,8 @@ def build_submission_records(
         pdf_pages = pdf_page_count(pdf_path) if pdf_path.exists() else None
         pdf_text, pdf_text_error = extract_pdf_text(pdf_path)
         checks = _build_checks(xml_paper, html_paper, pdf_path, pdf_pages, pdf_text, pdf_text_error)
+        if enabled_check_id_set is not None:
+            checks = [check for check in checks if check["id"] in enabled_check_id_set]
         status_counts = {
             "pass": sum(1 for check in checks if check["status"] == "pass"),
             "issue": sum(1 for check in checks if check["status"] == "issue"),

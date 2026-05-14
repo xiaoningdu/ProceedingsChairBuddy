@@ -43,6 +43,15 @@
               HotCRP HTML file
               <input name="html" type="file" accept=".html,.htm,text/html" required>
             </label>
+            <input name="checklist_ids_present" type="hidden" value="1">
+            <fieldset class="checklistPicker">
+              <legend>Checklist items</legend>
+              <label class="selectAllCheck">
+                <input id="selectAllChecks" type="checkbox" checked>
+                All checklist items
+              </label>
+              <div id="addTrackChecklist" class="checklistOptions"></div>
+            </fieldset>
             <div class="formActions">
               <button type="submit">Add track</button>
               <span id="addTrackMessage" class="formMessage"></span>

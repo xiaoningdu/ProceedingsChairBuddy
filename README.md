@@ -2,6 +2,23 @@
 
 This is a local prototype for reviewing final proceeding submissions against metadata, HotCRP export data, and extracted PDF text.
 
+The current version only supports proceedings that are prepared via HotCRP.
+
+## Local Prerequisites
+
+For local runs without Docker, install Poppler so the `pdftotext` command is available for PDF text extraction.
+
+```sh
+# macOS
+brew install poppler
+
+# Debian/Ubuntu
+sudo apt-get install poppler-utils
+
+# Windows
+choco install poppler
+```
+
 ## Run
 
 ```sh
@@ -12,6 +29,29 @@ Then open:
 
 ```text
 http://127.0.0.1:8765
+```
+
+## Run With Docker
+
+Build and start the container:
+
+```sh
+docker compose up --build
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8765
+```
+
+Docker stores uploaded tracks, `tracks.json`, and review progress under `proceedings_data/` on the host.
+
+To run without Compose:
+
+```sh
+docker build -t proceedings-chair-buddy .
+docker run --rm -p 8765:8765 -v "$PWD/proceedings_data:/data" proceedings-chair-buddy
 ```
 
 ## Current Behavior
@@ -31,7 +71,7 @@ http://127.0.0.1:8765
 
 Use the "Add track" form on the Tracks page. Select the track ZIP, XML, and HotCRP ACM HTML files with the browser file picker. The app copies them under `track_data/<track-id>/inputs/` and automatically extracts PDFs under `track_data/<track-id>/pdfs/`.
 
-Tracks are recorded in `tracks.json`. Per-paper review edits are saved under `review_state/`.
+Tracks are recorded in `tracks.json`. Per-paper review edits are saved under `review_state/`. When running with Docker, these files live under `proceedings_data/`.
 
 ## Current Limits
 

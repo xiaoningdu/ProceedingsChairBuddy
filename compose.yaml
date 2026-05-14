@@ -1,0 +1,7 @@
+services:
+  proceedings-chair-buddy:
+    build: .
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./proceedings_data:/data

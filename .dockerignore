@@ -1,0 +1,14 @@
+.git/
+.idea/
+__pycache__/
+.pycache/
+*.py[cod]
+
+review_state/
+track_data/
+sample_pdfs/
+tracks.json
+proceedings_data/
+
+*.zip
+*.pdf

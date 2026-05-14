@@ -157,6 +157,60 @@ button:hover,
   font: inherit;
 }
 
+.checklistPicker {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px 12px;
+}
+
+.checklistPicker legend {
+  padding: 0 4px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.selectAllCheck,
+.checklistOption {
+  color: var(--text);
+}
+
+.selectAllCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.selectAllCheck input,
+.checklistOption input {
+  width: 16px;
+  min-height: 16px;
+}
+
+.checklistOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 8px 14px;
+}
+
+.checklistOption {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.checklistOption span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .formActions {
   grid-column: 1 / -1;
   display: flex;
@@ -576,5 +630,16 @@ button:hover,
 
   .reviewPane {
     grid-column: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .addTrackForm,
+  .checklistOptions {
+    grid-template-columns: 1fr;
+  }
+
+  .checklistOption {
+    grid-template-columns: 16px minmax(0, 1fr);
   }
 }
