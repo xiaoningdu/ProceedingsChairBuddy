@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Proceedings Chair Buddy</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbarLeft">
+        <button id="backToTracks" type="button" hidden>Tracks</button>
+        <div>
+        <h1>Proceedings Chair Buddy</h1>
+        <p id="sourceSummary">Loading sample batch...</p>
+        </div>
+      </div>
+      <div class="topbarActions">
+        <button id="exportCsv" type="button" hidden>Export CSV</button>
+      </div>
+    </header>
+
+    <main id="homeView" class="homeView">
+      <section class="trackOverview">
+        <h2>Tracks</h2>
+        <p>Review progress is saved locally and can be resumed later.</p>
+        <details class="addTrackPanel">
+          <summary>Add track</summary>
+          <form id="addTrackForm" class="addTrackForm" enctype="multipart/form-data">
+            <label>
+              Track ID
+              <input name="id" required placeholder="research-track">
+            </label>
+            <label>
+              ZIP of final version
+              <input name="zip" type="file" accept=".zip,application/zip" required>
+            </label>
+            <label>
+              TOC XML
+              <input name="xml" type="file" accept=".xml,text/xml,application/xml" required>
+            </label>
+            <label>
+              HotCRP HTML file
+              <input name="html" type="file" accept=".html,.htm,text/html" required>
+            </label>
+            <div class="formActions">
+              <button type="submit">Add track</button>
+              <span id="addTrackMessage" class="formMessage"></span>
+            </div>
+          </form>
+        </details>
+        <div id="trackList" class="trackList"></div>
+      </section>
+    </main>
+
+    <main id="reviewView" class="layout" hidden>
+      <aside class="sidebar">
+        <div class="sidebarHeader">
+          <h2>Submissions</h2>
+          <span id="submissionCount"></span>
+        </div>
+        <div id="submissionList" class="submissionList"></div>
+      </aside>
+
+      <section class="viewerPane">
+        <div class="paneHeader">
+          <div>
+            <h2 id="paperTitle">Select a submission</h2>
+            <p id="paperMeta"></p>
+          </div>
+          <a id="openPdf" class="pdfLink" href="#" target="_blank" rel="noreferrer">Open PDF</a>
+        </div>
+        <iframe id="pdfViewer" title="Paper PDF"></iframe>
+      </section>
+
+      <section class="reviewPane">
+        <div class="paneHeader">
+          <div>
+            <h2>Checklist</h2>
+            <p id="checkSummary"></p>
+          </div>
+          <label class="completeToggle">
+            <input id="completedToggle" type="checkbox">
+            Finished
+          </label>
+        </div>
+        <div id="globalMessages" class="globalMessages"></div>
+        <details id="metadataPanel" class="metadataPanel">
+          <summary>Metadata</summary>
+          <div id="metadataContent"></div>
+        </details>
+        <div class="checklistScroll">
+          <div id="issueSummary" class="issueSummary"></div>
+          <div id="checklist" class="checklist"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

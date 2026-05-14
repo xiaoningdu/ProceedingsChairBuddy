@@ -1,0 +1,63 @@
+Checklist mapping for the current web prototype
+
+Inputs used by implemented checks:
+- TOC XML / e-rights XML
+- Paper PDF
+- HotCRP ACM settings HTML
+- Track review state saved locally by the app
+
+Checklist items displayed on the webpage
+
+1. PDF title matches metadata
+   Maps to original supported item 1: Check that the paper title in the PDF matches the title in the XML/e-rights metadata.
+
+2. PDF author list matches metadata
+   Maps to original supported item 2: Check that the author list in the PDF matches the author list in the XML/e-rights metadata.
+
+3. PDF affiliations match metadata
+   Maps to original supported item 3: Check that author affiliations in the PDF match the affiliations in the XML/e-rights metadata where affiliation text can be extracted from the PDF.
+
+4. All author emails in metadata appear in the PDF
+   Maps to original supported items 4 and 5: Check that author email addresses in the PDF match the email addresses in the XML/e-rights metadata; check that all author email addresses from the XML/e-rights metadata appear in the camera-ready PDF.
+
+5. All authors have ORCID in metadata
+   Maps to original supported item 6: Check whether every author in the XML/e-rights metadata has an ORCID value.
+
+6. ACM keywords added on HotCRP
+   Maps to original supported item 7: Check whether ACM keywords are missing on the HotCRP page, using HotCRP ACM proceeding warnings.
+
+7. ACM Computing Classification added on HotCRP
+   Maps to original supported item 8: Check whether ACM Computing Classification / CCS is missing on the HotCRP page, using HotCRP ACM proceeding warnings.
+
+8. References added on HotCRP
+   Maps to original supported item 9: Check whether references are missing on the HotCRP page, using HotCRP ACM proceeding warnings.
+
+9. Source files submitted
+   Maps to original supported item 10: Check whether source files were submitted for the camera-ready version, using HotCRP ACM settings HTML source-file links.
+
+10. Other issues
+    Maps to original supported item 11: Check HotCRP ACM proceeding warnings and errors for each paper, including missing fonts, bad fonts, missing ACM metadata, missing references, and other proceeding messages shown in the HTML.
+
+11. PDF copyright information includes ISBN
+    Maps to the checklist requirement that copyright/license information is present and consistent. This implementation checks that PDF copyright/license text and an ISBN marker are present in extracted PDF text.
+
+12. Page count available and locally consistent
+    Maps to original supported items 13 and 21: Check the page count recorded in the HotCRP ACM settings HTML; check PDF-level properties where the backend supports them.
+
+13. Paper PDF provided
+    App-specific intake check: confirms the ZIP contains a matching local paper PDF.
+
+14. PDF has no visible page numbers
+    Maps to the checklist requirement that final papers should not include page numbers.
+
+15. Latest ACM template used
+    Maps to original supported item 16: Check whether the PDF appears to use ACM formatting/template cues. This remains a chair-review item in the prototype.
+
+16. Authors stacked individually
+    Maps to original supported item 17: Check whether authors appear to be stacked individually in the PDF according to ACM interim layout guidance. This remains a chair-review item in the prototype.
+
+17. Last page balanced
+    Maps to original supported item 18: Check whether the last page appears visually balanced. This remains a chair-review item in the prototype.
+
+18. Track-specific page limit followed
+    Maps to original supported item 14: Check whether the PDF page count follows the configured page limit for the paper type or track. This remains a chair-review item until authoritative track/page-limit rules are configured.

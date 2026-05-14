@@ -1,0 +1,21 @@
+# Local IDE and Python artifacts
+.idea/
+*.iml
+__pycache__/
+.pycache/
+*.py[cod]
+
+# Local review state and uploaded/sample data
+review_state/
+track_data/
+sample_pdfs/
+tracks.json
+*.zip
+*.pdf
+
+# Sample input files
+llmsc26-acmcms-toc.xml
+Settings - LLMSC 2026.html
+
+# Internal planning/requirements notes
+REQUIREMENTS.md

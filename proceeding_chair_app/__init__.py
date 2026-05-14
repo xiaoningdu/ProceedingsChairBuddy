@@ -1,0 +1,1 @@
+"""Proceedings Chair Buddy prototype."""

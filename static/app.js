@@ -1,0 +1,445 @@
+let state = {
+  tracks: [],
+  currentTrack: null,
+  submissions: [],
+  selectedId: null,
+  saveTimer: null
+};
+
+const els = {
+  homeView: document.querySelector("#homeView"),
+  reviewView: document.querySelector("#reviewView"),
+  trackList: document.querySelector("#trackList"),
+  addTrackForm: document.querySelector("#addTrackForm"),
+  addTrackMessage: document.querySelector("#addTrackMessage"),
+  sourceSummary: document.querySelector("#sourceSummary"),
+  submissionCount: document.querySelector("#submissionCount"),
+  submissionList: document.querySelector("#submissionList"),
+  paperTitle: document.querySelector("#paperTitle"),
+  paperMeta: document.querySelector("#paperMeta"),
+  openPdf: document.querySelector("#openPdf"),
+  pdfViewer: document.querySelector("#pdfViewer"),
+  checkSummary: document.querySelector("#checkSummary"),
+  metadataContent: document.querySelector("#metadataContent"),
+  issueSummary: document.querySelector("#issueSummary"),
+  checklist: document.querySelector("#checklist"),
+  completedToggle: document.querySelector("#completedToggle"),
+  backToTracks: document.querySelector("#backToTracks"),
+  exportCsv: document.querySelector("#exportCsv")
+};
+
+async function init() {
+  await loadTracks();
+}
+
+async function loadTracks() {
+  const response = await fetch("/api/tracks");
+  const data = await response.json();
+  state.tracks = data.tracks;
+  renderTrackList();
+  showHome();
+}
+
+async function addTrack(event) {
+  event.preventDefault();
+  const formData = new FormData(els.addTrackForm);
+  els.addTrackMessage.textContent = "Adding...";
+  try {
+    const response = await fetch("/api/tracks", {
+      method: "POST",
+      body: formData
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    els.addTrackForm.reset();
+    els.addTrackMessage.textContent = "Track added.";
+    await loadTracks();
+  } catch (error) {
+    els.addTrackMessage.textContent = cleanErrorMessage(error.message);
+  }
+}
+
+function cleanErrorMessage(message) {
+  const match = message.match(/Message: ([\s\S]*?)\.\n/);
+  return match ? match[1] : message;
+}
+
+async function openTrack(trackId) {
+  const response = await fetch(`/api/tracks/${encodeURIComponent(trackId)}`);
+  const data = await response.json();
+  state.currentTrack = data.track;
+  state.submissions = data.submissions;
+  const sources = data.sources;
+  els.sourceSummary.textContent = `${data.track.name} · Sources: ${sources.xml}, ${sources.hotcrp_html}, ${sources.zip}`;
+  els.submissionCount.textContent = `${state.submissions.length} papers`;
+  els.exportCsv.hidden = false;
+  els.backToTracks.hidden = false;
+  els.homeView.hidden = true;
+  els.reviewView.hidden = false;
+  renderSubmissionList();
+  if (state.submissions.length) {
+    selectSubmission(state.selectedId && state.submissions.some(item => item.id === state.selectedId) ? state.selectedId : state.submissions[0].id);
+  }
+}
+
+function showHome() {
+  state.currentTrack = null;
+  state.submissions = [];
+  state.selectedId = null;
+  els.sourceSummary.textContent = "Select a track to continue review.";
+  els.exportCsv.hidden = true;
+  els.backToTracks.hidden = true;
+  els.homeView.hidden = false;
+  els.reviewView.hidden = true;
+}
+
+function renderTrackList() {
+  els.trackList.replaceChildren(...state.tracks.map(track => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "trackCard";
+    card.addEventListener("click", () => openTrack(track.id));
+
+    const title = document.createElement("span");
+    title.className = "trackTitle";
+    title.textContent = track.name;
+
+    const meta = document.createElement("span");
+    meta.className = "trackMeta";
+    meta.textContent = `${track.paper_count} papers · ${track.completed_count} finished · ${track.remaining_count} remaining`;
+
+    const badges = document.createElement("span");
+    badges.className = "badges";
+    badges.append(
+      badge(track.remaining_count ? "manual" : "pass", `${track.completed_count}/${track.paper_count} finished`),
+      badge(track.issue_count ? "issue" : "pass", `${track.issue_count} issues`)
+    );
+
+    const sources = document.createElement("span");
+    sources.className = "trackSources";
+    sources.textContent = `${track.sources.zip} · ${track.sources.xml} · ${track.sources.hotcrp_html}`;
+
+    const actions = document.createElement("span");
+    actions.className = "trackActions";
+    const openButton = document.createElement("span");
+    openButton.className = "trackOpenLabel";
+    openButton.textContent = "Open";
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "dangerButton";
+    removeButton.textContent = "Remove";
+    removeButton.addEventListener("click", event => {
+      event.stopPropagation();
+      removeTrack(track);
+    });
+    actions.append(openButton, removeButton);
+
+    card.append(title, meta, badges, sources, actions);
+    return card;
+  }));
+}
+
+async function removeTrack(track) {
+  const confirmed = confirm(`Remove track "${track.name}"? Review progress for this track will also be removed.`);
+  if (!confirmed) {
+    return;
+  }
+  const response = await fetch(`/api/tracks/${encodeURIComponent(track.id)}`, {method: "DELETE"});
+  if (!response.ok) {
+    alert(cleanErrorMessage(await response.text()));
+    return;
+  }
+  await loadTracks();
+}
+
+function renderSubmissionList() {
+  els.submissionList.replaceChildren(...state.submissions.map(submission => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "submissionItem";
+    button.classList.toggle("active", submission.id === state.selectedId);
+    button.dataset.id = submission.id;
+    button.addEventListener("click", () => selectSubmission(submission.id));
+
+    const title = document.createElement("span");
+    title.className = "submissionTitle";
+    title.textContent = `#${submission.id} ${submission.title}`;
+
+    const meta = document.createElement("span");
+    meta.className = "submissionMeta";
+    const hotcrp = submission.hotcrp;
+    meta.textContent = hotcrp ? `${hotcrp.acm_class || "Unknown class"} · ${hotcrp.page_count ?? "?"} pages` : "No HotCRP row";
+
+    const badges = document.createElement("span");
+    badges.className = "badges";
+    badges.append(
+      badge("pass", `${submission.status_counts.pass} pass`),
+      badge("issue", `${submission.status_counts.issue} issues`),
+      badge("manual", `${submission.status_counts.manual} manual`),
+      badge(submission.completed ? "pass" : "manual", submission.completed ? "finished" : "open")
+    );
+
+    button.append(title, meta, badges);
+    return button;
+  }));
+}
+
+function selectSubmission(id) {
+  saveSelectedSubmission();
+  state.selectedId = id;
+  document.querySelectorAll(".submissionItem").forEach(item => {
+    item.classList.toggle("active", item.dataset.id === id);
+  });
+  const submission = state.submissions.find(item => item.id === id);
+  renderSubmission(submission);
+}
+
+function renderSubmission(submission) {
+  const hotcrp = submission.hotcrp;
+  const xml = submission.xml;
+  els.paperTitle.textContent = `#${submission.id} ${submission.title}`;
+  els.paperMeta.textContent = [
+    hotcrp?.acm_class || xml?.paper_type || "Unknown class",
+    hotcrp?.page_count ? `${hotcrp.page_count} HotCRP pages` : null,
+    submission.pdf.page_count_estimate ? `${submission.pdf.page_count_estimate} local PDF pages` : null
+  ].filter(Boolean).join(" · ");
+
+  els.openPdf.href = submission.pdf.url || "#";
+  els.openPdf.style.visibility = submission.pdf.url ? "visible" : "hidden";
+  els.pdfViewer.src = submission.pdf.url || "about:blank";
+  els.completedToggle.checked = Boolean(submission.completed);
+
+  const counts = submission.status_counts;
+  els.checkSummary.textContent = `${counts.pass} pass · ${counts.issue} issue · ${counts.manual} manual · ${counts.unavailable} unavailable`;
+  renderMetadata(submission);
+  renderIssueSummary(submission.checks);
+  renderChecks(submission.checks);
+}
+
+function renderMetadata(submission) {
+  const xml = submission.xml;
+  const hotcrp = submission.hotcrp;
+  const authors = xml?.authors?.map(author => {
+    const marker = author.contact_author ? " (contact)" : "";
+    return `${author.name}${marker}`;
+  }).join(", ") || "Unavailable";
+
+  const dl = document.createElement("dl");
+  dl.className = "metadataGrid";
+  addMeta(dl, "Tracking", xml?.tracking_number || `#${submission.id}`);
+  addMeta(dl, "XML type", xml?.paper_type || "Unavailable");
+  addMeta(dl, "ACM class", hotcrp?.acm_class || "Unavailable");
+  addMeta(dl, "Page count", hotcrp?.page_count ?? submission.pdf.page_count_estimate ?? "Unavailable");
+  addMeta(dl, "Authors", authors);
+  addMeta(dl, "Source files", hotcrp?.source_files?.map(file => file.name).join(", ") || "None found");
+  els.metadataContent.replaceChildren(dl);
+}
+
+function renderIssueSummary(checks) {
+  const issues = checks.filter(check => check.status === "issue");
+  if (!issues.length) {
+    els.issueSummary.replaceChildren();
+    return;
+  }
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Issue Summary";
+
+  const list = document.createElement("ol");
+  list.className = "issueList";
+  list.replaceChildren(...issues.map(check => {
+    const item = document.createElement("li");
+    const label = document.createElement("strong");
+    label.textContent = `${check.display_no}. ${check.label}`;
+    const evidence = document.createElement("span");
+    evidence.textContent = `: ${check.evidence}`;
+    item.append(label, evidence);
+    return item;
+  }));
+
+  els.issueSummary.replaceChildren(heading, list);
+}
+
+function renderChecks(checks) {
+  const submission = selectedSubmission();
+  checks.forEach((check, index) => {
+    check.display_no = index + 1;
+  });
+  els.checklist.replaceChildren(...checks.map(check => {
+    const item = document.createElement("article");
+    item.className = `check ${check.status}`;
+
+    const header = document.createElement("div");
+    header.className = "checkHeader";
+
+    const title = document.createElement("div");
+    title.className = "checkTitle";
+    title.textContent = `${check.display_no}. ${check.label}`;
+
+    const status = document.createElement("select");
+    status.className = `statusSelect ${check.status}`;
+    status.setAttribute("aria-label", `${check.label} result`);
+    for (const optionValue of ["pass", "issue", "manual", "unavailable"]) {
+      const option = document.createElement("option");
+      option.value = optionValue;
+      option.textContent = optionValue;
+      option.selected = check.status === optionValue;
+      status.append(option);
+    }
+    status.addEventListener("change", () => {
+      check.status = status.value;
+      status.className = `statusSelect ${check.status}`;
+      item.className = `check ${check.status}`;
+      updateStatusCounts(submission);
+      renderIssueSummary(checks);
+      renderSubmissionList();
+      updateCheckSummary(submission);
+      scheduleSaveSubmission(submission);
+    });
+
+    const evidence = document.createElement("textarea");
+    evidence.className = "evidence";
+    evidence.value = check.evidence;
+    evidence.rows = Math.max(2, Math.min(8, Math.ceil(check.evidence.length / 58)));
+    evidence.setAttribute("aria-label", `${check.label} evidence`);
+    evidence.addEventListener("input", () => {
+      check.evidence = evidence.value;
+      evidence.rows = Math.max(2, Math.min(8, Math.ceil(evidence.value.length / 58)));
+      renderIssueSummary(checks);
+      scheduleSaveSubmission(submission);
+    });
+
+    const source = document.createElement("div");
+    source.className = "source";
+    source.textContent = `Source: ${check.source}`;
+
+    header.append(title, status);
+    item.append(header, evidence, source);
+    return item;
+  }));
+}
+
+function updateStatusCounts(submission) {
+  submission.status_counts = {
+    pass: submission.checks.filter(check => check.status === "pass").length,
+    issue: submission.checks.filter(check => check.status === "issue").length,
+    manual: submission.checks.filter(check => check.status === "manual").length,
+    unavailable: submission.checks.filter(check => check.status === "unavailable").length
+  };
+}
+
+function updateCheckSummary(submission) {
+  const counts = submission.status_counts;
+  els.checkSummary.textContent = `${counts.pass} pass · ${counts.issue} issue · ${counts.manual} manual · ${counts.unavailable} unavailable`;
+}
+
+function addMeta(dl, label, value) {
+  const dt = document.createElement("dt");
+  dt.textContent = label;
+  const dd = document.createElement("dd");
+  dd.textContent = value;
+  dl.append(dt, dd);
+}
+
+function badge(kind, text) {
+  const span = document.createElement("span");
+  span.className = `badge ${kind}`;
+  span.textContent = text;
+  return span;
+}
+
+function selectedSubmission() {
+  return state.submissions.find(item => item.id === state.selectedId);
+}
+
+function scheduleSaveSubmission(submission) {
+  clearTimeout(state.saveTimer);
+  state.saveTimer = setTimeout(() => saveSubmission(submission), 350);
+}
+
+async function saveSelectedSubmission() {
+  const submission = selectedSubmission();
+  return saveSubmission(submission);
+}
+
+async function saveSubmission(submission) {
+  if (!state.currentTrack || !submission) {
+    return;
+  }
+  await fetch(`/api/tracks/${encodeURIComponent(state.currentTrack.id)}/reviews`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      paper_id: submission.id,
+      completed: submission.completed,
+      checks: submission.checks.map(check => ({
+        id: check.id,
+        status: check.status,
+        evidence: check.evidence
+      }))
+    })
+  });
+}
+
+function exportCsv() {
+  const checkLabels = [];
+  for (const submission of state.submissions) {
+    for (const check of submission.checks) {
+      const numberedLabel = `${submission.checks.indexOf(check) + 1}. ${check.label}`;
+      if (!checkLabels.includes(numberedLabel)) {
+        checkLabels.push(numberedLabel);
+      }
+    }
+  }
+
+  const rows = [["paper_id", "title", "issue_summary", ...checkLabels]];
+  for (const submission of state.submissions) {
+    const checksByLabel = new Map(submission.checks.map((check, index) => [`${index + 1}. ${check.label}`, check]));
+    const issueSummary = submission.checks
+      .filter(check => check.status === "issue")
+      .map(check => `${check.display_no || submission.checks.indexOf(check) + 1}. ${check.label}: ${check.evidence}`)
+      .join("\n");
+    rows.push([
+      submission.id,
+      submission.title,
+      issueSummary,
+      ...checkLabels.map(label => {
+        const check = checksByLabel.get(label);
+        return check ? `${check.status}: ${check.evidence}` : "";
+      })
+    ]);
+  }
+  const csv = rows.map(row => row.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], {type: "text/csv"});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "proceeding-chair-results.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+els.completedToggle.addEventListener("change", () => {
+  const submission = selectedSubmission();
+  if (!submission) {
+    return;
+  }
+  submission.completed = els.completedToggle.checked;
+  renderSubmissionList();
+  scheduleSaveSubmission(submission);
+});
+els.backToTracks.addEventListener("click", async () => {
+  await saveSelectedSubmission();
+  await loadTracks();
+});
+els.exportCsv.addEventListener("click", exportCsv);
+els.addTrackForm.addEventListener("submit", addTrack);
+init().catch(error => {
+  els.sourceSummary.textContent = `Failed to load prototype data: ${error.message}`;
+});
