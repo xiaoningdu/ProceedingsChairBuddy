@@ -147,6 +147,35 @@ button:hover,
   font-weight: 600;
 }
 
+.labelWithHelp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.helpIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: help;
+  user-select: none;
+}
+
+.helpIcon:hover,
+.helpIcon:focus {
+  border-color: var(--focus);
+  color: var(--focus);
+  outline: none;
+}
+
 .addTrackForm input {
   width: 100%;
   min-height: 34px;
