@@ -1,5 +1,9 @@
 # Proceedings Chair Buddy
 
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
 This is a local prototype for reviewing final proceeding submissions against metadata, HotCRP export data, and extracted PDF text.
 
 The current version only supports proceedings that are prepared via HotCRP.
