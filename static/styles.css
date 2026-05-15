@@ -337,6 +337,30 @@ button:hover,
   border-bottom: 1px solid var(--line);
 }
 
+.submissionFilters {
+  min-height: 48px;
+  padding: 9px 14px;
+  display: flex;
+  gap: 7px;
+  border-bottom: 1px solid var(--line);
+}
+
+.submissionFilters button {
+  flex: 1 1 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.submissionFilters button.active {
+  border-color: var(--focus);
+  background: #eef4ff;
+  color: var(--focus);
+}
+
 .completeToggle {
   display: inline-flex;
   align-items: center;
@@ -354,7 +378,7 @@ button:hover,
 
 .submissionList {
   overflow-y: auto;
-  height: calc(100% - 64px);
+  height: calc(100% - 112px);
 }
 
 .submissionItem {

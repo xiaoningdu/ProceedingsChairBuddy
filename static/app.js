@@ -24,6 +24,7 @@ let state = {
   checklistItems: DEFAULT_CHECKLIST_ITEMS,
   currentTrack: null,
   submissions: [],
+  submissionFilter: "all",
   selectedId: null,
   saveTimer: null
 };
@@ -38,6 +39,7 @@ const els = {
   selectAllChecks: document.querySelector("#selectAllChecks"),
   sourceSummary: document.querySelector("#sourceSummary"),
   submissionCount: document.querySelector("#submissionCount"),
+  submissionFilters: document.querySelector("#submissionFilters"),
   submissionList: document.querySelector("#submissionList"),
   paperTitle: document.querySelector("#paperTitle"),
   paperMeta: document.querySelector("#paperMeta"),
@@ -151,9 +153,10 @@ async function openTrack(trackId) {
   const data = await response.json();
   state.currentTrack = data.track;
   state.submissions = data.submissions;
+  state.submissionFilter = "all";
   const sources = data.sources;
   els.sourceSummary.textContent = `${data.track.name} · Sources: ${sources.xml}, ${sources.hotcrp_html}, ${sources.zip}`;
-  els.submissionCount.textContent = `${state.submissions.length} papers`;
+  updateSubmissionCount();
   els.exportCsv.hidden = false;
   els.backToTracks.hidden = false;
   els.homeView.hidden = true;
@@ -167,6 +170,7 @@ async function openTrack(trackId) {
 function showHome() {
   state.currentTrack = null;
   state.submissions = [];
+  state.submissionFilter = "all";
   state.selectedId = null;
   els.sourceSummary.textContent = "Select a track to continue review.";
   els.exportCsv.hidden = true;
@@ -235,7 +239,10 @@ async function removeTrack(track) {
 }
 
 function renderSubmissionList() {
-  els.submissionList.replaceChildren(...state.submissions.map(submission => {
+  const visibleSubmissions = filteredSubmissions();
+  updateSubmissionCount();
+  updateSubmissionFilterButtons();
+  els.submissionList.replaceChildren(...visibleSubmissions.map(submission => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "submissionItem";
@@ -266,6 +273,54 @@ function renderSubmissionList() {
   }));
 }
 
+function filteredSubmissions() {
+  if (state.submissionFilter === "open") {
+    return state.submissions.filter(submission => !submission.completed);
+  }
+  if (state.submissionFilter === "finished") {
+    return state.submissions.filter(submission => submission.completed);
+  }
+  return state.submissions;
+}
+
+function updateSubmissionCount() {
+  const visibleCount = filteredSubmissions().length;
+  els.submissionCount.textContent = state.submissionFilter === "all"
+    ? `${state.submissions.length} papers`
+    : `${visibleCount}/${state.submissions.length} papers`;
+}
+
+function updateSubmissionFilterButtons() {
+  els.submissionFilters.querySelectorAll("button").forEach(button => {
+    const isActive = button.dataset.filter === state.submissionFilter;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+async function setSubmissionFilter(filter) {
+  if (!["open", "finished", "all"].includes(filter)) {
+    return;
+  }
+  state.submissionFilter = filter;
+  renderSubmissionList();
+  await ensureVisibleSelection();
+}
+
+async function ensureVisibleSelection() {
+  const visibleSubmissions = filteredSubmissions();
+  if (visibleSubmissions.some(submission => submission.id === state.selectedId)) {
+    return;
+  }
+  await saveSelectedSubmission();
+  if (visibleSubmissions.length) {
+    selectSubmission(visibleSubmissions[0].id);
+    return;
+  }
+  state.selectedId = null;
+  clearSubmission();
+}
+
 function selectSubmission(id) {
   saveSelectedSubmission();
   state.selectedId = id;
@@ -274,6 +329,19 @@ function selectSubmission(id) {
   });
   const submission = state.submissions.find(item => item.id === id);
   renderSubmission(submission);
+}
+
+function clearSubmission() {
+  els.paperTitle.textContent = "No submissions";
+  els.paperMeta.textContent = "";
+  els.openPdf.href = "#";
+  els.openPdf.style.visibility = "hidden";
+  els.pdfViewer.src = "about:blank";
+  els.completedToggle.checked = false;
+  els.checkSummary.textContent = "";
+  els.metadataContent.replaceChildren();
+  els.issueSummary.replaceChildren();
+  els.checklist.replaceChildren();
 }
 
 function renderSubmission(submission) {
@@ -514,6 +582,13 @@ els.completedToggle.addEventListener("change", () => {
   submission.completed = els.completedToggle.checked;
   renderSubmissionList();
   scheduleSaveSubmission(submission);
+  ensureVisibleSelection();
+});
+els.submissionFilters.addEventListener("click", event => {
+  const button = event.target.closest("button[data-filter]");
+  if (button) {
+    setSubmissionFilter(button.dataset.filter);
+  }
 });
 els.backToTracks.addEventListener("click", async () => {
   await saveSelectedSubmission();
