@@ -10,7 +10,6 @@ const DEFAULT_CHECKLIST_ITEMS = [
   {id: "source_files", label: "Source files submitted"},
   {id: "proceeding_messages", label: "Other issues"},
   {id: "pdf_copyright_isbn", label: "PDF copyright information includes ISBN"},
-  {id: "page_count", label: "Page count available and locally consistent"},
   {id: "pdf_exists", label: "Paper PDF provided"},
   {id: "pdf_page_numbers", label: "PDF has no visible page numbers"},
   {id: "latest_acm_template", label: "Latest ACM template used"},
@@ -51,6 +50,7 @@ const els = {
   checklist: document.querySelector("#checklist"),
   completedToggle: document.querySelector("#completedToggle"),
   backToTracks: document.querySelector("#backToTracks"),
+  rerunChecks: document.querySelector("#rerunChecks"),
   exportCsv: document.querySelector("#exportCsv")
 };
 
@@ -157,6 +157,7 @@ async function openTrack(trackId) {
   const sources = data.sources;
   els.sourceSummary.textContent = `${data.track.name} · Sources: ${sources.xml}, ${sources.hotcrp_html}, ${sources.zip}`;
   updateSubmissionCount();
+  els.rerunChecks.hidden = false;
   els.exportCsv.hidden = false;
   els.backToTracks.hidden = false;
   els.homeView.hidden = true;
@@ -173,6 +174,7 @@ function showHome() {
   state.submissionFilter = "all";
   state.selectedId = null;
   els.sourceSummary.textContent = "Select a track to continue review.";
+  els.rerunChecks.hidden = true;
   els.exportCsv.hidden = true;
   els.backToTracks.hidden = true;
   els.homeView.hidden = false;
@@ -236,6 +238,31 @@ async function removeTrack(track) {
     return;
   }
   await loadTracks();
+}
+
+async function rerunChecks() {
+  if (!state.currentTrack) {
+    return;
+  }
+  const confirmed = confirm("Rerun automated checks for this track? This will replace saved check results and evidence, but keep each paper's finished/open status.");
+  if (!confirmed) {
+    return;
+  }
+  clearTimeout(state.saveTimer);
+  els.rerunChecks.disabled = true;
+  try {
+    const response = await fetch(`/api/tracks/${encodeURIComponent(state.currentTrack.id)}/rerun-checks`, {
+      method: "POST"
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    await openTrack(state.currentTrack.id);
+  } catch (error) {
+    alert(cleanErrorMessage(error.message));
+  } finally {
+    els.rerunChecks.disabled = false;
+  }
 }
 
 function renderSubmissionList() {
@@ -361,6 +388,7 @@ function renderSubmission(submission) {
 
   const counts = submission.status_counts;
   els.checkSummary.textContent = `${counts.pass} pass · ${counts.issue} issue · ${counts.manual} manual · ${counts.unavailable} unavailable`;
+  assignCheckDisplayNumbers(submission.checks);
   renderMetadata(submission);
   renderIssueSummary(submission.checks);
   renderChecks(submission.checks);
@@ -395,7 +423,7 @@ function renderIssueSummary(checks) {
   const heading = document.createElement("h3");
   heading.textContent = "Issue Summary";
 
-  const list = document.createElement("ol");
+  const list = document.createElement("ul");
   list.className = "issueList";
   list.replaceChildren(...issues.map(check => {
     const item = document.createElement("li");
@@ -412,9 +440,6 @@ function renderIssueSummary(checks) {
 
 function renderChecks(checks) {
   const submission = selectedSubmission();
-  checks.forEach((check, index) => {
-    check.display_no = index + 1;
-  });
   els.checklist.replaceChildren(...checks.map(check => {
     const item = document.createElement("article");
     item.className = `check ${check.status}`;
@@ -467,6 +492,12 @@ function renderChecks(checks) {
     item.append(header, evidence, source);
     return item;
   }));
+}
+
+function assignCheckDisplayNumbers(checks) {
+  checks.forEach((check, index) => {
+    check.display_no = index + 1;
+  });
 }
 
 function updateStatusCounts(submission) {
@@ -594,6 +625,7 @@ els.backToTracks.addEventListener("click", async () => {
   await saveSelectedSubmission();
   await loadTracks();
 });
+els.rerunChecks.addEventListener("click", rerunChecks);
 els.exportCsv.addEventListener("click", exportCsv);
 els.addTrackForm.addEventListener("submit", addTrack);
 els.addTrackForm.addEventListener("reset", () => setTimeout(syncSelectAllChecks, 0));

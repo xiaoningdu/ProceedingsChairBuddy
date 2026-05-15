@@ -281,6 +281,14 @@ def save_paper_review(track_id: str, payload: dict) -> dict:
     return {"ok": True}
 
 
+def rerun_track_checks(track_id: str) -> dict:
+    state = load_track_state(track_id)
+    for paper_state in state.get("papers", {}).values():
+        paper_state.pop("checks", None)
+    save_track_state(track_id, state)
+    return {"ok": True}
+
+
 def remove_track(track_id: str) -> dict:
     tracks = load_tracks_config()
     remaining = [track for track in tracks if track.get("id") != track_id]
@@ -346,6 +354,12 @@ class Handler(SimpleHTTPRequestHandler):
                 self._serve_json(save_paper_review(track_id, payload))
             except ValueError as exc:
                 self.send_error(400, str(exc))
+        elif self.path.startswith("/api/tracks/") and self.path.endswith("/rerun-checks"):
+            track_id = unquote(self.path.removeprefix("/api/tracks/").removesuffix("/rerun-checks").strip("/"))
+            if not find_track(track_id):
+                self.send_error(404)
+                return
+            self._serve_json(rerun_track_checks(track_id))
         else:
             self.send_error(404)
 

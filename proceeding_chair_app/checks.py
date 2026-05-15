@@ -20,13 +20,12 @@ CHECKLIST_ITEMS = [
     {"id": "source_files", "label": "Source files submitted", "source": "HotCRP ACM HTML"},
     {"id": "proceeding_messages", "label": "Other issues", "source": "HotCRP ACM HTML"},
     {"id": "pdf_copyright_isbn", "label": "PDF copyright information includes ISBN", "source": "PDF"},
-    {"id": "page_count", "label": "Page count available and locally consistent", "source": "HotCRP ACM HTML + PDF"},
     {"id": "pdf_exists", "label": "Paper PDF provided", "source": "ZIP"},
     {"id": "pdf_page_numbers", "label": "PDF has no visible page numbers", "source": "PDF"},
     {"id": "latest_acm_template", "label": "Latest ACM template used", "source": "PDF + HotCRP"},
     {"id": "authors_stacked", "label": "Authors stacked individually", "source": "PDF"},
     {"id": "last_page_balanced", "label": "Last page balanced", "source": "PDF"},
-    {"id": "track_page_limit", "label": "Track-specific page limit followed", "source": "HotCRP + rules"},
+    {"id": "track_page_limit", "label": "Track-specific page limit followed", "source": "HotCRP ACM HTML + rules"},
 ]
 
 CHECKLIST_IDS = [item["id"] for item in CHECKLIST_ITEMS]
@@ -88,7 +87,6 @@ def _build_checks(
     pdf_text_error: str,
 ) -> List[Dict]:
     messages = html_paper.messages if html_paper else []
-    message_text = " | ".join(message["text"] for message in messages).lower()
     return [
         _title_check(xml_paper, pdf_text, pdf_text_error),
         _authors_check(xml_paper, pdf_text, pdf_text_error),
@@ -98,25 +96,24 @@ def _build_checks(
         _missing_warning_check(
             "hotcrp_acm_keywords",
             "ACM keywords added on HotCRP",
-            "missing acm keywords" in message_text or "acm computing classification, acm keywords, and references" in message_text,
+            "acm keywords",
             messages,
         ),
         _missing_warning_check(
             "hotcrp_ccs",
             "ACM Computing Classification added on HotCRP",
-            "missing acm computing classification" in message_text,
+            "acm computing classification",
             messages,
         ),
         _missing_warning_check(
             "hotcrp_references",
             "References added on HotCRP",
-            "missing references" in message_text or "acm computing classification, acm keywords, and references" in message_text,
+            "references",
             messages,
         ),
         _source_files_check(html_paper),
         _proceeding_messages_check(messages),
         _copyright_isbn_check(pdf_text, pdf_text_error),
-        _page_count_check(html_paper, pdf_pages),
         _pdf_exists_check(pdf_path),
         _page_numbers_check(pdf_text, pdf_text_error),
         _check("latest_acm_template", "Latest ACM template used", "manual", "Chair review required. Select pass if acceptable, or issue if a correction is needed.", "PDF + HotCRP"),
@@ -164,8 +161,8 @@ def _title_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_error: s
     if not pdf_text:
         return _check("title_pdf_vs_xml", label, "manual", "PDF text extraction is unavailable.", "PDF + XML")
     if _words_in_order(xml_paper.title, pdf_text):
-        return _check("title_pdf_vs_xml", label, "pass", "The metadata title was found in extracted PDF text.", "PDF + XML")
-    return _check("title_pdf_vs_xml", label, "issue", "The metadata title was not found in extracted PDF text.", "PDF + XML")
+        return _check("title_pdf_vs_xml", label, "pass", "The metadata title matches that found in extracted PDF text.", "PDF + XML")
+    return _check("title_pdf_vs_xml", label, "issue", "The metadata title doesn't match that found in extracted PDF text.", "PDF + XML")
 
 
 def _authors_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_error: str) -> Dict:
@@ -180,8 +177,8 @@ def _authors_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_error:
         if not _words_in_order(author.name, pdf_text)
     ]
     if missing:
-        return _check("authors_pdf_vs_xml", label, "issue", "Missing metadata author positions from extracted PDF text: " + ", ".join(missing), "PDF + XML")
-    return _check("authors_pdf_vs_xml", label, "pass", "All metadata author names were found in extracted PDF text.", "PDF + XML")
+        return _check("authors_pdf_vs_xml", label, "issue", "Authors whose names in PDF don't match those in HotCRP metadata: " + ", ".join(missing), "PDF + XML")
+    return _check("authors_pdf_vs_xml", label, "pass", "All metadata author names match those found in extracted PDF text.", "PDF + XML")
 
 
 def _affiliations_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_error: str) -> Dict:
@@ -195,8 +192,8 @@ def _affiliations_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_e
         if author.affiliation and not _words_in_order(author.affiliation, pdf_text):
             missing.append(_author_position(author, index))
     if missing:
-        return _check("affiliations_pdf_vs_xml", label, "issue", "Missing metadata affiliation positions from extracted PDF text: " + ", ".join(missing), "PDF + XML")
-    return _check("affiliations_pdf_vs_xml", label, "pass", "All metadata affiliations were found in extracted PDF text.", "PDF + XML")
+        return _check("affiliations_pdf_vs_xml", label, "issue", "Authors whose affiliations in PDF don't match those in HotCRP metadata: " + ", ".join(missing), "PDF + XML")
+    return _check("affiliations_pdf_vs_xml", label, "pass", "All metadata affiliations match those found in extracted PDF text.", "PDF + XML")
 
 
 def _emails_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_error: str) -> Dict:
@@ -212,8 +209,8 @@ def _emails_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_error: 
         if author.email and author.email.lower() not in normalized_pdf_text
     ]
     if missing:
-        return _check("emails_in_pdf", label, "issue", "Missing email for metadata author positions from extracted PDF text: " + ", ".join(missing), "PDF + XML")
-    return _check("emails_in_pdf", label, "pass", "All metadata author emails were found in extracted PDF text.", "PDF + XML")
+        return _check("emails_in_pdf", label, "issue", "Authors whose emails in PDF don't match those in HotCRP metadata: " + ", ".join(missing), "PDF + XML")
+    return _check("emails_in_pdf", label, "pass", "All metadata author emails match those found in extracted PDF text.", "PDF + XML")
 
 
 def _page_numbers_check(pdf_text: str, pdf_text_error: str) -> Dict:
@@ -241,10 +238,14 @@ def _copyright_isbn_check(pdf_text: str, pdf_text_error: str) -> Dict:
     return _check("pdf_copyright_isbn", label, "issue", "Missing from extracted PDF text: " + ", ".join(missing), "PDF")
 
 
-def _missing_warning_check(check_id: str, label: str, is_missing: bool, messages: List[Dict[str, str]]) -> Dict:
-    if is_missing:
-        evidence = "HotCRP reported this metadata is missing."
-        return _check(check_id, label, "issue", evidence, "HotCRP ACM HTML")
+def _missing_warning_check(check_id: str, label: str, keyword: str, messages: List[Dict[str, str]]) -> Dict:
+    matching_messages = [
+        message["text"]
+        for message in messages
+        if keyword in message["text"].lower()
+    ]
+    if matching_messages:
+        return _check(check_id, label, "issue", "; ".join(matching_messages), "HotCRP ACM HTML")
     return _check(check_id, label, "pass", "No matching missing-metadata warning found in the HotCRP ACM HTML.", "HotCRP ACM HTML")
 
 
@@ -259,28 +260,14 @@ def _source_files_check(html_paper: Optional[HtmlPaper]) -> Dict:
 
 
 def _proceeding_messages_check(messages: List[Dict[str, str]]) -> Dict:
-    errors = [message["text"] for message in messages if message["severity"] == "error"]
-    warnings = [message["text"] for message in messages if message["severity"] == "warning"]
-    if errors:
-        return _check("proceeding_messages", "Other issues", "issue", "; ".join(errors), "HotCRP ACM HTML")
-    if warnings:
-        return _check("proceeding_messages", "Other issues", "issue", "; ".join(warnings), "HotCRP ACM HTML")
+    issues = [
+        message["text"]
+        for message in messages
+        if message["severity"] in {"error", "warning"}
+    ]
+    if issues:
+        return _check("proceeding_messages", "Other issues", "issue", "; ".join(issues), "HotCRP ACM HTML")
     return _check("proceeding_messages", "Other issues", "pass", "No per-paper proceeding messages found.", "HotCRP ACM HTML")
-
-
-def _page_count_check(html_paper: Optional[HtmlPaper], pdf_pages: Optional[int]) -> Dict:
-    if html_paper and html_paper.page_count is not None:
-        evidence = f"HotCRP page count: {html_paper.page_count}"
-        if pdf_pages is not None:
-            evidence += f"; local PDF estimate: {pdf_pages}"
-            status = "pass" if html_paper.page_count == pdf_pages else "issue"
-            if status == "issue":
-                evidence += " (counts differ)"
-            return _check("page_count", "Page count available and locally consistent", status, evidence, "HotCRP ACM HTML + PDF")
-        return _check("page_count", "Page count available", "pass", evidence, "HotCRP ACM HTML")
-    if pdf_pages is not None:
-        return _check("page_count", "Page count available", "pass", f"Local PDF estimate: {pdf_pages}", "PDF")
-    return _check("page_count", "Page count available", "unavailable", "No page count found.", "HotCRP ACM HTML + PDF")
 
 
 def _pdf_exists_check(pdf_path: Path) -> Dict:

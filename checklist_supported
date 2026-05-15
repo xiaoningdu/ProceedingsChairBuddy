@@ -41,23 +41,20 @@ Checklist items displayed on the webpage
 11. PDF copyright information includes ISBN
     Maps to the checklist requirement that copyright/license information is present and consistent. This implementation checks that PDF copyright/license text and an ISBN marker are present in extracted PDF text.
 
-12. Page count available and locally consistent
-    Maps to original supported items 13 and 21: Check the page count recorded in the HotCRP ACM settings HTML; check PDF-level properties where the backend supports them.
-
-13. Paper PDF provided
+12. Paper PDF provided
     App-specific intake check: confirms the ZIP contains a matching local paper PDF.
 
-14. PDF has no visible page numbers
+13. PDF has no visible page numbers
     Maps to the checklist requirement that final papers should not include page numbers.
 
-15. Latest ACM template used
+14. Latest ACM template used
     Maps to original supported item 16: Check whether the PDF appears to use ACM formatting/template cues. This remains a chair-review item in the prototype.
 
-16. Authors stacked individually
+15. Authors stacked individually
     Maps to original supported item 17: Check whether authors appear to be stacked individually in the PDF according to ACM interim layout guidance. This remains a chair-review item in the prototype.
 
-17. Last page balanced
+16. Last page balanced
     Maps to original supported item 18: Check whether the last page appears visually balanced. This remains a chair-review item in the prototype.
 
-18. Track-specific page limit followed
+17. Track-specific page limit followed
     Maps to original supported item 14: Check whether the PDF page count follows the configured page limit for the paper type or track. This remains a chair-review item until authoritative track/page-limit rules are configured.
