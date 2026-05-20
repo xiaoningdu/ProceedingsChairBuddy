@@ -291,23 +291,49 @@ def rerun_track_checks(track_id: str) -> dict:
 
 def remove_track(track_id: str) -> dict:
     tracks = load_tracks_config()
+    # Keep a copy of the track configuration before rewriting tracks.json.
+    # We need its file paths below to decide whether there is an app-managed
+    # upload directory that can be safely removed from disk.
     track = find_track(track_id)
     remaining = [track for track in tracks if track.get("id") != track_id]
     if len(remaining) == len(tracks):
         raise KeyError(track_id)
+
+    # Removing the track from the registry is the canonical "remove" action:
+    # once this is saved, the track disappears from the UI and API summaries.
     save_tracks_config(remaining)
+
+    # Review state is always owned by this app, so it is safe to delete for
+    # both uploaded tracks and manually configured tracks.
     state_path = STATE_DIR / f"{track_id}.json"
     if state_path.exists():
         state_path.unlink()
+
+    # Uploaded tracks are copied under track_data/<track-id>/. Delete that
+    # entire directory only when the current track configuration proves it is
+    # using exactly that app-managed layout. This avoids deleting arbitrary
+    # user-provided folders for manually configured tracks.
     if track and _is_app_managed_track_dir(track, track_id):
         shutil.rmtree(TRACK_DATA_DIR / track_id, ignore_errors=True)
     return {"ok": True}
 
 
 def _is_app_managed_track_dir(track: dict, track_id: str) -> bool:
+    # add_track_upload() stores files like this:
+    #
+    #   track_data/<track-id>/inputs/<uploaded xml/html/zip>
+    #   track_data/<track-id>/pdfs/<extracted PDFs>
+    #
+    # Only this exact structure is considered app-managed. If a track points
+    # anywhere else—absolute paths, shared directories, or a custom pdf_dir—we
+    # leave those files alone when the track is removed.
     expected_dir = (TRACK_DATA_DIR / track_id).resolve()
     expected_input_dir = expected_dir / "inputs"
     expected_pdf_dir = expected_dir / "pdfs"
+
+    # Resolve paths before comparison so equivalent relative/absolute paths
+    # are treated the same, and so prefix-like paths cannot pass by string
+    # coincidence.
     managed_paths = [
         track_path(track, "xml").resolve(),
         track_path(track, "html").resolve(),

@@ -206,7 +206,7 @@ button:hover,
   color: var(--text);
 }
 
-.selectAllCheck {
+.addTrackForm .selectAllCheck {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -214,7 +214,7 @@ button:hover,
   font-weight: 700;
 }
 
-.selectAllCheck input,
+.addTrackForm .selectAllCheck input,
 .checklistOption input {
   width: 16px;
   min-height: 16px;

@@ -86,7 +86,7 @@ async function loadTracks() {
 async function addTrack(event) {
   event.preventDefault();
   const formData = new FormData(els.addTrackForm);
-  els.addTrackMessage.textContent = "Adding...";
+  showAddTrackMessage("Adding...");
   try {
     const response = await fetch("/api/tracks", {
       method: "POST",
@@ -101,11 +101,15 @@ async function addTrack(event) {
     if (panel) {
       panel.open = false;
     }
-    els.addTrackMessage.textContent = "Track added.";
+    showAddTrackMessage("");
     await loadTracks();
   } catch (error) {
-    els.addTrackMessage.textContent = cleanErrorMessage(error.message);
+    showAddTrackMessage(cleanErrorMessage(error.message));
   }
+}
+
+function showAddTrackMessage(message) {
+  els.addTrackMessage.textContent = message;
 }
 
 function renderAddTrackChecklist() {
@@ -232,6 +236,9 @@ async function removeTrack(track) {
   if (!confirmed) {
     return;
   }
+  // The backend performs the destructive cleanup. It always removes the track
+  // registry entry and review state, and it only deletes uploaded files when
+  // they live in the app-managed track_data/<track-id>/ layout.
   const response = await fetch(`/api/tracks/${encodeURIComponent(track.id)}`, {method: "DELETE"});
   if (!response.ok) {
     alert(cleanErrorMessage(await response.text()));
