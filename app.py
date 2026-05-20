@@ -159,6 +159,65 @@ def add_track_upload(fields: dict, files: dict) -> dict:
     return {"ok": True, "track": track}
 
 
+def update_track_files(track_id: str, files: dict) -> dict:
+    if not re_match_track_id(track_id):
+        raise ValueError("Track ID may contain only letters, numbers, dashes, and underscores")
+    tracks = load_tracks_config()
+    track = next((candidate for candidate in tracks if candidate.get("id") == track_id), None)
+    if not track:
+        raise KeyError(track_id)
+
+    replacement_keys = [key for key in ["zip", "xml", "html"] if key in files and getattr(files[key], "filename", "")]
+    if not replacement_keys:
+        raise ValueError("Select at least one replacement ZIP, XML, or HotCRP HTML file")
+
+    base_dir = TRACK_DATA_DIR / track_id
+    input_dir = base_dir / "inputs"
+    pdf_dir = base_dir / "pdfs"
+    staging_dir = base_dir / ".update_tmp"
+    staging_input_dir = staging_dir / "inputs"
+    staging_pdf_dir = staging_dir / "pdfs"
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir)
+    staging_input_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_paths = {}
+    for key in replacement_keys:
+        saved_paths[key] = _save_uploaded_file(files[key], staging_input_dir)
+
+    try:
+        if "zip" in saved_paths:
+            # Validate and extract the replacement ZIP before touching the
+            # existing pdfs directory. If extraction fails, the current track
+            # files remain active.
+            ensure_sample_pdfs(saved_paths["zip"], staging_pdf_dir)
+    except Exception as exc:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        raise ValueError(f"Could not extract replacement ZIP: {exc}") from exc
+
+    input_dir.mkdir(parents=True, exist_ok=True)
+    final_paths = {}
+    for key, staged_path in saved_paths.items():
+        final_path = input_dir / staged_path.name
+        if final_path.exists():
+            final_path.unlink()
+        shutil.move(str(staged_path), final_path)
+        final_paths[key] = final_path
+        track[key] = _relative_path(final_path)
+
+    if "zip" in final_paths:
+        if pdf_dir.exists():
+            shutil.rmtree(pdf_dir)
+        shutil.move(str(staging_pdf_dir), pdf_dir)
+        track["pdf_dir"] = _relative_path(pdf_dir)
+
+    shutil.rmtree(staging_dir, ignore_errors=True)
+
+    save_tracks_config(tracks)
+    _clear_saved_checks(track_id)
+    return {"ok": True, "updated": replacement_keys}
+
+
 def _save_uploaded_file(field, directory: Path) -> Path:
     filename = _safe_filename(field.filename)
     target = directory / filename
@@ -282,11 +341,15 @@ def save_paper_review(track_id: str, payload: dict) -> dict:
 
 
 def rerun_track_checks(track_id: str) -> dict:
+    _clear_saved_checks(track_id)
+    return {"ok": True}
+
+
+def _clear_saved_checks(track_id: str) -> None:
     state = load_track_state(track_id)
     for paper_state in state.get("papers", {}).values():
         paper_state.pop("checks", None)
     save_track_state(track_id, state)
-    return {"ok": True}
 
 
 def remove_track(track_id: str) -> dict:
@@ -399,6 +462,15 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 payload = self._read_json()
                 self._serve_json(save_paper_review(track_id, payload))
+            except ValueError as exc:
+                self.send_error(400, str(exc))
+        elif self.path.startswith("/api/tracks/") and self.path.endswith("/files"):
+            track_id = unquote(self.path.removeprefix("/api/tracks/").removesuffix("/files").strip("/"))
+            try:
+                fields, files = self._read_multipart()
+                self._serve_json(update_track_files(track_id, files))
+            except KeyError:
+                self.send_error(404)
             except ValueError as exc:
                 self.send_error(400, str(exc))
         elif self.path.startswith("/api/tracks/") and self.path.endswith("/rerun-checks"):

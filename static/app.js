@@ -187,10 +187,8 @@ function showHome() {
 
 function renderTrackList() {
   els.trackList.replaceChildren(...state.tracks.map(track => {
-    const card = document.createElement("button");
-    card.type = "button";
+    const card = document.createElement("article");
     card.className = "trackCard";
-    card.addEventListener("click", () => openTrack(track.id));
 
     const title = document.createElement("span");
     title.className = "trackTitle";
@@ -213,22 +211,98 @@ function renderTrackList() {
 
     const actions = document.createElement("span");
     actions.className = "trackActions";
-    const openButton = document.createElement("span");
+    const openButton = document.createElement("button");
+    openButton.type = "button";
     openButton.className = "trackOpenLabel";
     openButton.textContent = "Open";
+    openButton.addEventListener("click", () => openTrack(track.id));
+
+    const updateToggle = document.createElement("button");
+    updateToggle.type = "button";
+    updateToggle.textContent = "Update files";
+    updateToggle.addEventListener("click", () => {
+      updatePanel.hidden = !updatePanel.hidden;
+    });
+
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "dangerButton";
     removeButton.textContent = "Remove";
-    removeButton.addEventListener("click", event => {
-      event.stopPropagation();
-      removeTrack(track);
-    });
-    actions.append(openButton, removeButton);
+    removeButton.addEventListener("click", () => removeTrack(track));
+    actions.append(openButton, updateToggle, removeButton);
 
-    card.append(title, meta, badges, sources, actions);
+    const updatePanel = createUpdateTrackPanel(track);
+    card.append(title, meta, badges, sources, actions, updatePanel);
     return card;
   }));
+}
+
+function createUpdateTrackPanel(track) {
+  const form = document.createElement("form");
+  form.className = "updateTrackForm";
+  form.hidden = true;
+  form.enctype = "multipart/form-data";
+
+  form.append(
+    fileField("zip", "Replacement ZIP", ".zip,application/zip"),
+    fileField("xml", "Replacement TOC XML", ".xml,text/xml,application/xml"),
+    fileField("html", "Replacement HotCRP HTML", ".html,.htm,text/html")
+  );
+
+  const actions = document.createElement("span");
+  actions.className = "updateTrackActions";
+
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.textContent = "Save updates";
+
+  const message = document.createElement("span");
+  message.className = "formMessage";
+
+  actions.append(submit, message);
+  form.append(actions);
+  form.addEventListener("submit", event => updateTrackFiles(event, track, message));
+  return form;
+}
+
+function fileField(name, labelText, accept) {
+  const label = document.createElement("label");
+  label.textContent = labelText;
+
+  const input = document.createElement("input");
+  input.name = name;
+  input.type = "file";
+  input.accept = accept;
+  label.append(input);
+  return label;
+}
+
+async function updateTrackFiles(event, track, message) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const hasReplacement = [...formData.values()].some(value => value instanceof File && value.name);
+  if (!hasReplacement) {
+    message.textContent = "Select at least one file to update.";
+    return;
+  }
+
+  message.textContent = "Updating...";
+  try {
+    const response = await fetch(`/api/tracks/${encodeURIComponent(track.id)}/files`, {
+      method: "POST",
+      body: formData
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    form.reset();
+    form.hidden = true;
+    message.textContent = "";
+    await loadTracks();
+  } catch (error) {
+    message.textContent = cleanErrorMessage(error.message);
+  }
 }
 
 async function removeTrack(track) {
@@ -435,7 +509,7 @@ function renderIssueSummary(checks) {
   list.replaceChildren(...issues.map(check => {
     const item = document.createElement("li");
     const label = document.createElement("strong");
-    label.textContent = `${check.display_no}. ${check.label}`;
+    label.textContent = check.label;
     const evidence = document.createElement("span");
     evidence.textContent = `: ${check.evidence}`;
     item.append(label, evidence);
