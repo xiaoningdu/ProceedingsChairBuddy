@@ -419,6 +419,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._serve_file(STATIC_DIR / "styles.css", "text/css; charset=utf-8")
         elif self.path == "/app.js":
             self._serve_file(STATIC_DIR / "app.js", "application/javascript; charset=utf-8")
+        elif self.path == "/app-icon.svg":
+            self._serve_file(STATIC_DIR / "app-icon.svg", "image/svg+xml")
         elif self.path == "/api/checklist-items":
             self._serve_json({"items": CHECKLIST_ITEMS})
         elif self.path == "/api/tracks":

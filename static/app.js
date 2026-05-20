@@ -177,7 +177,7 @@ function showHome() {
   state.submissions = [];
   state.submissionFilter = "all";
   state.selectedId = null;
-  els.sourceSummary.textContent = "Select a track to continue review.";
+  els.sourceSummary.textContent = "";
   els.rerunChecks.hidden = true;
   els.exportCsv.hidden = true;
   els.backToTracks.hidden = true;
