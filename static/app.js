@@ -573,7 +573,7 @@ function exportCsv() {
     }
   }
 
-  const rows = [["paper_id", "title", "issue_summary", ...checkLabels]];
+  const rows = [["paper_id", "issue_summary", ...checkLabels]];
   for (const submission of state.submissions) {
     const checksByLabel = new Map(submission.checks.map((check, index) => [`${index + 1}. ${check.label}`, check]));
     const issueSummary = submission.checks
@@ -582,7 +582,6 @@ function exportCsv() {
       .join("\n");
     rows.push([
       submission.id,
-      submission.title,
       issueSummary,
       ...checkLabels.map(label => {
         const check = checksByLabel.get(label);
