@@ -291,6 +291,7 @@ def rerun_track_checks(track_id: str) -> dict:
 
 def remove_track(track_id: str) -> dict:
     tracks = load_tracks_config()
+    track = find_track(track_id)
     remaining = [track for track in tracks if track.get("id") != track_id]
     if len(remaining) == len(tracks):
         raise KeyError(track_id)
@@ -298,7 +299,27 @@ def remove_track(track_id: str) -> dict:
     state_path = STATE_DIR / f"{track_id}.json"
     if state_path.exists():
         state_path.unlink()
+    if track and _is_app_managed_track_dir(track, track_id):
+        shutil.rmtree(TRACK_DATA_DIR / track_id, ignore_errors=True)
     return {"ok": True}
+
+
+def _is_app_managed_track_dir(track: dict, track_id: str) -> bool:
+    expected_dir = (TRACK_DATA_DIR / track_id).resolve()
+    expected_input_dir = expected_dir / "inputs"
+    expected_pdf_dir = expected_dir / "pdfs"
+    managed_paths = [
+        track_path(track, "xml").resolve(),
+        track_path(track, "html").resolve(),
+        track_path(track, "zip").resolve(),
+        track_path(track, "pdf_dir").resolve(),
+    ]
+    return (
+        managed_paths[0].parent == expected_input_dir
+        and managed_paths[1].parent == expected_input_dir
+        and managed_paths[2].parent == expected_input_dir
+        and managed_paths[3] == expected_pdf_dir
+    )
 
 
 class Handler(SimpleHTTPRequestHandler):
