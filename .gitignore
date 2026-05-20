@@ -8,6 +8,7 @@ __pycache__/
 # Local review state and uploaded/sample data
 review_state/
 track_data/
+proceedings_data/
 sample_pdfs/
 tracks.json
 *.zip

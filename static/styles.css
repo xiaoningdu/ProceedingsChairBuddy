@@ -1,5 +1,7 @@
 :root {
   color-scheme: light;
+  --topbar-h: 72px;
+  --chain-h: 44px;
   --bg: #f6f7f9;
   --panel: #ffffff;
   --text: #20242a;
@@ -37,10 +39,38 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  height: 72px;
+  height: var(--topbar-h);
   padding: 12px 20px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+}
+
+.reviewChainBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--chain-h);
+  padding: 8px 20px;
+  background: #fbfcfe;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.reviewChip {
+  flex: 0 0 auto;
+  height: 28px;
+  margin-left: calc(var(--review-depth, 0) * 10px);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.reviewChip.active {
+  border-color: var(--focus);
+  background: #eef4ff;
+  color: var(--focus);
 }
 
 .topbarLeft {
@@ -108,7 +138,7 @@ button:hover,
 }
 
 .homeView {
-  min-height: calc(100vh - 72px);
+  min-height: calc(100vh - var(--topbar-h));
   padding: 24px;
   background: var(--bg);
 }
@@ -262,6 +292,13 @@ button:hover,
   overflow-wrap: anywhere;
 }
 
+.warningText {
+  margin: 0;
+  color: var(--manual);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .trackCard {
   height: auto;
   min-height: 150px;
@@ -274,6 +311,13 @@ button:hover,
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
+}
+
+.trackHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .trackTitle {
@@ -295,15 +339,137 @@ button:hover,
 
 .trackActions {
   display: flex;
-  justify-content: flex-start;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.trackOpenLabel {
+.reviewPanels {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.followUpPanel {
+  display: grid;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.followUpPanel:hover {
+  border-color: var(--focus);
+}
+
+.followUpPanel.active {
+  border-color: var(--focus);
+  background: #f3f7ff;
+}
+
+.followUpPanel input,
+.followUpPanel label,
+.followUpPanel form {
+  cursor: auto;
+}
+
+.followUpPanel .badges {
+  gap: 6px;
+}
+
+.followUpSources {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.followUpForm {
+  display: grid;
+  gap: 10px;
+}
+
+.followUpUploadPanel {
+  display: grid;
+  gap: 9px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.followUpUploadPanel[hidden] {
+  display: none;
+}
+
+.followUpPanelHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.followUpPanelHeader h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.followUpPanelMeta,
+.followUpEmpty {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.followUpActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.panelActionButton {
+  min-width: 124px;
+}
+
+.panelActionButton.active {
+  border-color: var(--focus);
+  background: #eef4ff;
   color: var(--focus);
   font-weight: 700;
+}
+
+.panelActionButton:disabled {
+  border-color: var(--line);
+  background: var(--unavailable-bg);
+  color: var(--unavailable);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.followUpUploadPanel .followUpActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.followUpUploadPanel label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.followUpUploadPanel input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--text);
+  font: inherit;
 }
 
 .dangerButton {
@@ -353,7 +519,7 @@ button:hover,
 .layout {
   display: grid;
   grid-template-columns: 320px minmax(420px, 1fr) minmax(360px, 460px);
-  height: calc(100vh - 72px);
+  height: calc(100vh - var(--topbar-h) - var(--chain-h));
   min-height: 620px;
 }
 
@@ -371,6 +537,14 @@ button:hover,
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.checkTitleWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .sidebarHeader,
@@ -499,11 +673,41 @@ button:hover,
   color: var(--manual);
 }
 
+.badge.comparison.fixed {
+  background: var(--pass-bg);
+  color: var(--pass);
+}
+
+.badge.comparison.still-present {
+  background: var(--issue-bg);
+  color: var(--issue);
+}
+
+.badge.comparison.new {
+  background: #eef4ff;
+  color: var(--focus);
+}
+
 #pdfViewer {
   width: 100%;
   height: calc(100% - 64px);
   border: 0;
   background: #e7eaf0;
+}
+
+.pdfUnavailable {
+  height: calc(100% - 64px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f8fafc;
+  color: var(--muted);
+  text-align: center;
+  font-weight: 700;
+}
+
+.pdfUnavailable[hidden] {
+  display: none;
 }
 
 .metadataPanel,
@@ -577,6 +781,22 @@ button:hover,
   margin: 0 0 8px;
   font-size: 14px;
   color: var(--issue);
+}
+
+.issueSummary h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.issueSummary p {
+  margin: 0 0 10px;
+}
+
+.issueGroup {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
 
 .issueList {

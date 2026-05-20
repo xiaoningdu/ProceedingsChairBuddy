@@ -1,6 +1,8 @@
 services:
   proceedings-chair-buddy:
     build: .
+    environment:
+      PCB_HOST: 0.0.0.0
     ports:
       - "8765:8765"
     volumes:

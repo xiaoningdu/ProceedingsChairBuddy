@@ -22,6 +22,7 @@
         <button id="exportCsv" type="button" hidden>Export CSV</button>
       </div>
     </header>
+    <div id="reviewChainBar" class="reviewChainBar" hidden></div>
 
     <main id="homeView" class="homeView">
       <section class="trackOverview">
@@ -91,6 +92,9 @@
           <a id="openPdf" class="pdfLink" href="#" target="_blank" rel="noreferrer">Open PDF</a>
         </div>
         <iframe id="pdfViewer" title="Paper PDF"></iframe>
+        <div id="pdfUnavailable" class="pdfUnavailable" hidden>
+          This paper has no issues anymore in this review.
+        </div>
       </section>
 
       <section class="reviewPane">
