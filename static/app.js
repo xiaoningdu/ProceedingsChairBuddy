@@ -524,7 +524,7 @@ async function rerunChecks() {
     return;
   }
   const reviewLabel = state.currentReview?.label || "the selected review";
-  const confirmed = confirm(`Rerun automated checks for ${reviewLabel}? This will replace saved check results and evidence, but keep each paper's finished/open status.`);
+  const confirmed = confirm(`Rerun automated checks for ${reviewLabel}? This will overwrite all check results for this review round. Each paper's finished/open status will be kept.`);
   if (!confirmed) {
     return;
   }
@@ -961,6 +961,7 @@ function renderChecks(checks) {
       renderIssueSummary(checks);
       renderSubmissionList();
       updateCheckSummary(submission);
+      markCheckSaving(saveStatus);
       scheduleSaveSubmission(submission);
     });
 
@@ -975,15 +976,24 @@ function renderChecks(checks) {
       evidence.rows = Math.max(2, Math.min(8, Math.ceil(evidence.value.length / 58)));
       updateComparisonState(submission);
       renderIssueSummary(checks);
+      markCheckSaving(saveStatus);
       scheduleSaveSubmission(submission);
     });
 
-    const source = document.createElement("div");
+    const footer = document.createElement("div");
+    footer.className = "checkFooter";
+
+    const source = document.createElement("span");
     source.className = "source";
     source.textContent = `Source: ${check.source}`;
 
+    const saveStatus = document.createElement("span");
+    saveStatus.className = "saveStatus";
+    saveStatus.setAttribute("aria-live", "polite");
+    footer.append(source, saveStatus);
+
     header.append(titleWrap, status);
-    item.append(header, evidence, source);
+    item.append(header, evidence, footer);
     return item;
   }));
 }
@@ -1070,6 +1080,28 @@ function selectedSubmission() {
   return state.submissions.find(item => item.id === state.selectedId);
 }
 
+function markCheckSaving(saveStatus) {
+  if (!saveStatus) {
+    return;
+  }
+  saveStatus.textContent = "Saving...";
+  saveStatus.className = "saveStatus saving";
+}
+
+function markChecklistSaved() {
+  els.checklist.querySelectorAll(".saveStatus.saving").forEach(saveStatus => {
+    saveStatus.textContent = "Saved";
+    saveStatus.className = "saveStatus saved";
+  });
+}
+
+function markChecklistSaveError() {
+  els.checklist.querySelectorAll(".saveStatus.saving").forEach(saveStatus => {
+    saveStatus.textContent = "Save failed";
+    saveStatus.className = "saveStatus error";
+  });
+}
+
 function scheduleSaveSubmission(submission) {
   if (reviewIsLocked()) {
     return;
@@ -1087,7 +1119,7 @@ async function saveSubmission(submission) {
   if (!state.currentTrack || !submission || reviewIsLocked()) {
     return;
   }
-  await fetch(`/api/tracks/${encodeURIComponent(state.currentTrack.id)}/reviews`, {
+  const response = await fetch(`/api/tracks/${encodeURIComponent(state.currentTrack.id)}/reviews`, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({
@@ -1101,6 +1133,11 @@ async function saveSubmission(submission) {
       }))
     })
   });
+  if (!response.ok) {
+    markChecklistSaveError();
+    throw new Error(await response.text());
+  }
+  markChecklistSaved();
 }
 
 function exportCsv() {
@@ -1114,7 +1151,7 @@ function exportCsv() {
     }
   }
 
-  const rows = [["review_id", "review_label", "paper_id", "issue_summary", ...checkLabels]];
+  const rows = [["paper_id", "issue_summary", ...checkLabels]];
   for (const submission of state.submissions) {
     const checksByLabel = new Map(submission.checks.map((check, index) => [`${index + 1}. ${check.label}`, check]));
     const issueSummary = submission.checks
@@ -1122,8 +1159,6 @@ function exportCsv() {
       .map(check => `${check.display_no || submission.checks.indexOf(check) + 1}. ${check.label}: ${check.evidence}`)
       .join("\n");
     rows.push([
-      state.currentReview?.id || "",
-      state.currentReview?.label || "",
       submission.id,
       issueSummary,
       ...checkLabels.map(label => {
@@ -1137,9 +1172,22 @@ function exportCsv() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "proceeding-chair-results.csv";
+  link.download = csvFilename();
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function csvFilename() {
+  const trackName = safeFilenamePart(state.currentTrack?.name || state.currentTrack?.id || "track");
+  const reviewRound = safeFilenamePart(state.currentReview?.label || state.currentReview?.id || "review");
+  return `${trackName}-${reviewRound}-results.csv`;
+}
+
+function safeFilenamePart(value) {
+  const text = String(value || "").trim().toLowerCase();
+  return text
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "unnamed";
 }
 
 function csvCell(value) {

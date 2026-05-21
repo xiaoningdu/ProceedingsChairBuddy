@@ -137,6 +137,18 @@ button:hover,
   border-color: var(--focus);
 }
 
+button:disabled {
+  border-color: var(--line);
+  background: var(--unavailable-bg);
+  color: var(--unavailable);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+button:disabled:hover {
+  border-color: var(--line);
+}
+
 .homeView {
   min-height: calc(100vh - var(--topbar-h));
   padding: 24px;
@@ -932,10 +944,32 @@ button:hover,
   outline: none;
 }
 
-.source {
+.checkFooter {
   margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.source {
   color: var(--muted);
   font-size: 12px;
+}
+
+.saveStatus {
+  min-width: 56px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.saveStatus.saved {
+  color: var(--pass);
+}
+
+.saveStatus.error {
+  color: var(--issue);
 }
 
 @media (max-width: 1100px) {

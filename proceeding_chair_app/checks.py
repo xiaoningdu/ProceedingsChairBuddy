@@ -218,7 +218,13 @@ def _page_numbers_check(pdf_text: str, pdf_text_error: str) -> Dict:
         return _check("pdf_page_numbers", "PDF has no visible page numbers", "manual", "PDF text extraction is unavailable.", "PDF")
     evidence = _detect_page_number_evidence(pdf_text)
     if evidence:
-        return _check("pdf_page_numbers", "PDF has no visible page numbers", "issue", evidence, "PDF")
+        return _check(
+            "pdf_page_numbers",
+            "PDF has no visible page numbers",
+            "issue",
+            "Page numbers are identified. You have to disable the page numbers in the camera ready version.",
+            "PDF",
+        )
     return _check("pdf_page_numbers", "PDF has no visible page numbers", "pass", "No standalone page-number-like text found near page boundaries.", "PDF")
 
 
