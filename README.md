@@ -2,12 +2,14 @@
 
 Proceedings Chair Buddy is a local web app for proceedings chairs who need to review camera-ready papers against HotCRP proceedings data, TOC XML metadata, and extracted PDF text.
 
+This tool is intended to facilitate proceedings chairs, not replace them. It brings the main checking sources into a one-stop review experience and automates checks where the source data supports it, but responsibility for camera-ready quality remains with the chairs unless the proceedings-chair role no longer exists for the venue. Chairs should treat automated results as review aids and apply their own judgment before accepting final papers.
+
 The current version is built for proceedings prepared through HotCRP.
 
 ## Features
 
 - Manage multiple tracks from a single home page.
-- Add each track from a ZIP of final-version PDFs, TOC XML, and HotCRP ACM HTML export.
+- Add each track from a ZIP of final-version PDFs, TOC XML, HotCRP ACM HTML export, and optional ACM e-Right HTML.
 - Choose which checklist items apply when adding a track.
 - Review each paper with the PDF, metadata, issue summary, and editable checklist side by side.
 - Save per-paper finished/open state, checklist result overrides, and edited comments.
@@ -112,7 +114,7 @@ Automated and assisted checks currently cover:
 - PDF title, author list, affiliations, and author emails against metadata.
 - ORCID presence in metadata.
 - ACM keywords, CCS, references, source files, and other HotCRP proceedings messages.
-- Copyright/ISBN text detection in extracted PDF text.
+- DOI, ISBN, and copyright type against ACM e-Right data.
 - PDF availability.
 - Visible page-number detection.
 - Manual review prompts for ACM template version, author stacking, last-page balance, and track-specific page limit.
