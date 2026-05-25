@@ -1,60 +1,131 @@
-Checklist mapping for the current web prototype
+Checklist mapping for the current web app
 
 Inputs used by implemented checks:
 - TOC XML / e-rights XML
-- Paper PDF
+- Paper PDF extracted from the uploaded ZIP
 - HotCRP ACM settings HTML
+- ACM e-Right HTML
 - Track review state saved locally by the app
 
-Checklist items displayed on the webpage
+Displayed checklist items
 
 1. PDF title matches metadata
-   Maps to original supported item 1: Check that the paper title in the PDF matches the title in the XML/e-rights metadata.
+   Status: automated.
+   Sources: PDF + XML.
+   Maps to original item 1: title consistency across submitted paper, HotCRP/XML metadata, and e-right metadata.
+   Current behavior: checks whether the XML title appears in extracted PDF text.
 
 2. PDF author list matches metadata
-   Maps to original supported item 2: Check that the author list in the PDF matches the author list in the XML/e-rights metadata.
+   Status: automated.
+   Sources: PDF + XML.
+   Maps to original item 1: author-list consistency.
+   Current behavior: checks whether each XML author name appears in extracted PDF text.
 
 3. PDF affiliations match metadata
-   Maps to original supported item 3: Check that author affiliations in the PDF match the affiliations in the XML/e-rights metadata where affiliation text can be extracted from the PDF.
+   Status: automated.
+   Sources: PDF + XML.
+   Maps to original item 1: affiliation consistency.
+   Current behavior: checks whether XML affiliations appear in extracted PDF text when affiliation text is available.
 
 4. All author emails in metadata appear in the PDF
-   Maps to original supported items 4 and 5: Check that author email addresses in the PDF match the email addresses in the XML/e-rights metadata; check that all author email addresses from the XML/e-rights metadata appear in the camera-ready PDF.
+   Status: automated.
+   Sources: PDF + XML.
+   Maps to original items 1 and 8: email consistency and all author emails present in the camera-ready PDF.
+   Current behavior: checks whether each XML author email appears in extracted PDF text.
 
 5. All authors have ORCID in metadata
-   Maps to original supported item 6: Check whether every author in the XML/e-rights metadata has an ORCID value.
+   Status: automated.
+   Sources: XML.
+   Maps to original item 6: every author provides ORCID.
+   Current behavior: checks whether every XML author record has an ORCID value.
 
 6. ACM keywords added on HotCRP
-   Maps to original supported item 7: Check whether ACM keywords are missing on the HotCRP page, using HotCRP ACM proceeding warnings.
+   Status: automated.
+   Sources: HotCRP ACM HTML.
+   Maps to original item 2: include ACM keywords.
+   Current behavior: checks HotCRP ACM proceeding messages for missing ACM keyword warnings.
 
 7. ACM Computing Classification added on HotCRP
-   Maps to original supported item 8: Check whether ACM Computing Classification / CCS is missing on the HotCRP page, using HotCRP ACM proceeding warnings.
+   Status: automated.
+   Sources: HotCRP ACM HTML.
+   Maps to original item 3: include ACM Computing Classification / CCS.
+   Current behavior: checks HotCRP ACM proceeding messages for missing CCS warnings.
 
 8. References added on HotCRP
-   Maps to original supported item 9: Check whether references are missing on the HotCRP page, using HotCRP ACM proceeding warnings.
+   Status: automated.
+   Sources: HotCRP ACM HTML.
+   Maps to original item 4: include references.
+   Current behavior: checks HotCRP ACM proceeding messages for missing reference warnings.
 
 9. Source files submitted
-   Maps to original supported item 10: Check whether source files were submitted for the camera-ready version, using HotCRP ACM settings HTML source-file links.
+   Status: automated.
+   Sources: HotCRP ACM HTML.
+   Maps to original item 5: submit source files for the camera-ready version.
+   Current behavior: checks whether the HotCRP ACM row includes source-file archive links.
 
 10. Other issues
-    Maps to original supported item 11: Check HotCRP ACM proceeding warnings and errors for each paper, including missing fonts, bad fonts, missing ACM metadata, missing references, and other proceeding messages shown in the HTML.
+    Status: automated.
+    Sources: HotCRP ACM HTML.
+    Maps to original item 10: fix HotCRP format-check warnings and errors.
+    Current behavior: reports per-paper HotCRP ACM proceeding warnings and errors, including missing fonts, bad fonts, missing ACM metadata, missing references, and other messages shown in the HTML.
 
-11. PDF copyright information includes ISBN
-    Maps to the checklist requirement that copyright/license information is present and consistent. This implementation checks that PDF copyright/license text and an ISBN marker are present in extracted PDF text.
+11. PDF DOI matches e-Right
+    Status: automated.
+    Sources: PDF + e-Right.
+    Maps to original item 1: copyright/license metadata consistency across submitted paper and e-right form.
+    Current behavior: checks whether the DOI from the matching e-Right row appears in extracted PDF text.
 
-12. Paper PDF provided
-    App-specific intake check: confirms the ZIP contains a matching local paper PDF.
+12. PDF ISBN matches e-Right
+    Status: automated.
+    Sources: PDF + e-Right.
+    Maps to original item 1: copyright/license metadata consistency across submitted paper and e-right form.
+    Current behavior: checks whether the ISBN from the matching e-Right rights details appears in extracted PDF text.
 
-13. PDF has no visible page numbers
-    Maps to the checklist requirement that final papers should not include page numbers.
+13. PDF copyright type matches e-Right
+    Status: automated.
+    Sources: PDF + e-Right.
+    Maps to original item 1: copyright/license metadata consistency across submitted paper and e-right form.
+    Current behavior: checks whether the copyright type from the matching e-Right rights details appears in extracted PDF text.
 
-14. Latest ACM template used
-    Maps to original supported item 16: Check whether the PDF appears to use ACM formatting/template cues. This remains a chair-review item in the prototype.
+14. Paper PDF provided
+    Status: automated.
+    Sources: ZIP.
+    App-specific intake check.
+    Current behavior: confirms the uploaded ZIP contains a matching local paper PDF.
 
-15. Authors stacked individually
-    Maps to original supported item 17: Check whether authors appear to be stacked individually in the PDF according to ACM interim layout guidance. This remains a chair-review item in the prototype.
+15. PDF has no visible page numbers
+    Status: automated heuristic.
+    Sources: PDF.
+    Maps to proceedings formatting requirements.
+    Current behavior: scans extracted PDF text near page boundaries for standalone page-number-like text.
 
-16. Last page balanced
-    Maps to original supported item 18: Check whether the last page appears visually balanced. This remains a chair-review item in the prototype.
+16. Latest ACM template used
+    Status: chair review.
+    Sources: PDF + HotCRP.
+    Maps to original item 7: use the latest ACM template.
+    Current behavior: defaults to manual review, with HotCRP class/status shown in the note.
 
-17. Track-specific page limit followed
-    Maps to original supported item 14: Check whether the PDF page count follows the configured page limit for the paper type or track. This remains a chair-review item until authoritative track/page-limit rules are configured.
+17. Authors stacked individually
+    Status: chair review.
+    Sources: PDF.
+    Maps to original item 9: authors should be stacked individually according to ACM interim layout guidance.
+    Current behavior: defaults to manual review.
+
+18. Last page balanced
+    Status: chair review.
+    Sources: PDF.
+    Maps to original item 11: last page should be balanced.
+    Current behavior: defaults to manual review.
+
+19. Track-specific page limit followed
+    Status: chair review.
+    Sources: HotCRP ACM HTML + rules.
+    Maps to original item 12: follow the track-specific page limit.
+    Current behavior: defaults to manual review until authoritative track/page-limit rules are configured.
+
+Follow-up review support
+
+- A follow-up review can be created from any review with issue papers.
+- Follow-up checks inherit checklist items and issue papers from the parent review.
+- A parent review is locked after a follow-up is created.
+- Follow-up results tag issues as new, still present, or fixed by comparing with the parent review.
