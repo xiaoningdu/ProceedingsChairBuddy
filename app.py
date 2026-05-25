@@ -14,7 +14,7 @@ from typing import Optional
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from proceeding_chair_app.checks import CHECKLIST_IDS, CHECKLIST_ITEMS, build_submission_records
-from proceeding_chair_app.parsers import ensure_sample_pdfs, load_hotcrp_html, load_xml_papers
+from proceeding_chair_app.parsers import ensure_sample_pdfs, load_eright, load_hotcrp_html, load_xml_papers
 
 
 ROOT = Path(__file__).resolve().parent
@@ -25,6 +25,14 @@ STATE_DIR = DATA_DIR / "review_state"
 REVIEW_ASSETS_DIR = DATA_DIR / "review_assets"
 TRACK_DATA_DIR = DATA_DIR / "track_data"
 STATE_SCHEMA_VERSION = 2
+SOURCE_KEYS = ["zip", "xml", "html"]
+OPTIONAL_SOURCE_KEYS = ["copyright_html"]
+COPYRIGHT_DASHBOARD_CHECK_IDS = {
+    "copyright_doi_matches_pdf",
+    "copyright_isbn_matches_pdf",
+    "copyright_type_matches_pdf",
+}
+RETIRED_CHECKLIST_IDS = {"pdf_copyright_isbn"}
 
 
 def load_tracks_config() -> list[dict]:
@@ -48,6 +56,14 @@ def default_track_id() -> str:
 
 def track_path(track: dict, key: str) -> Path:
     path = Path(track[key])
+    return path if path.is_absolute() else DATA_DIR / path
+
+
+def optional_track_path(track: dict, key: str) -> Optional[Path]:
+    value = track.get(key)
+    if not value:
+        return None
+    path = Path(value)
     return path if path.is_absolute() else DATA_DIR / path
 
 
@@ -188,7 +204,7 @@ def _normalize_review_sources(sources: object) -> dict:
     if not isinstance(sources, dict):
         return {}
     normalized = {}
-    for key in ["zip", "xml", "html", "pdf_dir"]:
+    for key in [*SOURCE_KEYS, *OPTIONAL_SOURCE_KEYS, "pdf_dir"]:
         value = sources.get(key)
         if value:
             normalized[key] = str(value)
@@ -241,10 +257,12 @@ def parse_checklist_ids(values: object, default_all: bool = True) -> list[str]:
         raw_values = [str(item).strip() for item in values if str(item).strip()]
     else:
         raw_values = []
-    unknown = sorted(set(raw_values) - set(CHECKLIST_IDS))
+    selected = set(raw_values) - RETIRED_CHECKLIST_IDS
+    unknown = sorted(selected - set(CHECKLIST_IDS))
     if unknown:
         raise ValueError("Unknown checklist item: " + ", ".join(unknown))
-    selected = set(raw_values)
+    if selected == set(CHECKLIST_IDS) - COPYRIGHT_DASHBOARD_CHECK_IDS:
+        selected = set(CHECKLIST_IDS)
     return [check_id for check_id in CHECKLIST_IDS if check_id in selected]
 
 
@@ -329,12 +347,15 @@ def _review_title(review: dict) -> str:
 
 
 def _review_snapshot(track: dict) -> dict:
-    return {
+    snapshot = {
         "xml": track["xml"],
         "html": track["html"],
         "zip": track["zip"],
         "pdf_dir": track["pdf_dir"],
     }
+    if track.get("copyright_html"):
+        snapshot["copyright_html"] = track["copyright_html"]
+    return snapshot
 
 
 def _review_asset_dir(track_id: str, review_id: str) -> Path:
@@ -358,7 +379,7 @@ def _snapshot_review_sources(track_id: str, review_id: str, sources: dict, files
 
     snapshot = {}
     zip_replaced = False
-    for key in ["zip", "xml", "html"]:
+    for key in SOURCE_KEYS:
         uploaded = files.get(key)
         if uploaded is not None and getattr(uploaded, "filename", ""):
             saved_path = _save_uploaded_file(uploaded, input_dir)
@@ -378,6 +399,22 @@ def _snapshot_review_sources(track_id: str, review_id: str, sources: dict, files
                 if key == "zip":
                     zip_replaced = True
             snapshot[key] = _relative_path(target)
+    for key in OPTIONAL_SOURCE_KEYS:
+        uploaded = files.get(key)
+        if uploaded is not None and getattr(uploaded, "filename", ""):
+            saved_path = _save_uploaded_file(uploaded, input_dir)
+            snapshot[key] = _relative_path(saved_path)
+            continue
+        source = sources.get(key)
+        if not source:
+            continue
+        source_path = _resolve_review_source_path(source, key)
+        if not source_path.exists():
+            continue
+        target = input_dir / source_path.name
+        if source_path.resolve() != target.resolve():
+            shutil.copy2(source_path, target)
+        snapshot[key] = _relative_path(target)
     zip_source = _resolve_review_source_path(snapshot["zip"], "zip")
     if zip_replaced:
         shutil.rmtree(pdf_dir, ignore_errors=True)
@@ -392,6 +429,7 @@ def _review_source_names(review: dict) -> dict:
     return {
         "xml": Path(sources["xml"]).name if sources.get("xml") else "",
         "html": Path(sources["html"]).name if sources.get("html") else "",
+        "copyright_html": Path(sources["copyright_html"]).name if sources.get("copyright_html") else "",
         "zip": Path(sources["zip"]).name if sources.get("zip") else "",
         "pdf_dir": Path(sources["pdf_dir"]).name if sources.get("pdf_dir") else "",
     }
@@ -420,9 +458,17 @@ def _comparison_for_checks(current_checks: list[dict], baseline_checks: dict) ->
     return comparison_counts
 
 
-def _build_review_records(track: dict, review: dict, xml_papers: dict, html_papers: dict, pdf_dir: Path, review_id: str = "") -> list[dict]:
+def _build_review_records(
+    track: dict,
+    review: dict,
+    xml_papers: dict,
+    html_papers: dict,
+    pdf_dir: Path,
+    copyright_papers: Optional[dict] = None,
+    review_id: str = "",
+) -> list[dict]:
     checklist_ids = parse_checklist_ids(track.get("checklist_ids"))
-    records = build_submission_records(xml_papers, html_papers, pdf_dir, checklist_ids)
+    records = build_submission_records(xml_papers, html_papers, pdf_dir, copyright_papers or {}, checklist_ids)
     review_paper_ids = set(_review_paper_ids(review, [record["id"] for record in records]))
     records = [record for record in records if record["id"] in review_paper_ids]
     paper_states = review.get("papers", {})
@@ -453,16 +499,30 @@ def _build_review_records(track: dict, review: dict, xml_papers: dict, html_pape
 def _review_paths(review: dict, track: dict) -> dict:
     sources = review.get("sources", {})
     if sources.get("zip") and sources.get("xml") and sources.get("html") and sources.get("pdf_dir"):
-        return sources
+        merged_sources = dict(sources)
+        for key in OPTIONAL_SOURCE_KEYS:
+            if not merged_sources.get(key) and track.get(key):
+                merged_sources[key] = track[key]
+        return merged_sources
     return _review_snapshot(track)
 
 
-def _ensure_root_review(state: dict, track: dict, xml_papers: dict, html_papers: dict, pdf_dir: Path) -> dict:
+def _load_copyright_papers(source_paths: dict) -> dict:
+    source = source_paths.get("copyright_html")
+    if not source:
+        return {}
+    source_path = _resolve_review_source_path(source, "copyright_html")
+    if not source_path.exists():
+        return {}
+    return load_eright(source_path)
+
+
+def _ensure_root_review(state: dict, track: dict, xml_papers: dict, html_papers: dict, pdf_dir: Path, copyright_papers: Optional[dict] = None) -> dict:
     if state.get("reviews"):
         return state
 
     checklist_ids = parse_checklist_ids(track.get("checklist_ids"))
-    records = build_submission_records(xml_papers, html_papers, pdf_dir, checklist_ids)
+    records = build_submission_records(xml_papers, html_papers, pdf_dir, copyright_papers or {}, checklist_ids)
     root_review_id = "review-1"
     root_review = {
         "id": root_review_id,
@@ -496,6 +556,7 @@ def add_track(payload: dict) -> dict:
     name = str(payload.get("name", "")).strip()
     xml = str(payload.get("xml", "")).strip()
     html = str(payload.get("html", "")).strip()
+    copyright_html = str(payload.get("copyright_html", "")).strip()
     zip_path = str(payload.get("zip", "")).strip()
     pdf_dir = str(payload.get("pdf_dir", "")).strip()
     if not all([track_id, name, xml, html, zip_path, pdf_dir]):
@@ -508,6 +569,8 @@ def add_track(payload: dict) -> dict:
     for file_key, file_path in [("xml", xml), ("html", html), ("zip", zip_path)]:
         if not track_path({file_key: file_path}, file_key).is_file():
             raise ValueError(f"{file_key} file does not exist")
+    if copyright_html and not track_path({"copyright_html": copyright_html}, "copyright_html").is_file():
+        raise ValueError("copyright_html file does not exist")
     track_path({"pdf_dir": pdf_dir}, "pdf_dir").mkdir(parents=True, exist_ok=True)
     checklist_ids = parse_checklist_ids(payload.get("checklist_ids"))
     track = {
@@ -519,6 +582,8 @@ def add_track(payload: dict) -> dict:
         "pdf_dir": pdf_dir,
         "checklist_ids": checklist_ids,
     }
+    if copyright_html:
+        track["copyright_html"] = copyright_html
     tracks.append(track)
     save_tracks_config(tracks)
     return {"ok": True, "track": track}
@@ -534,7 +599,7 @@ def add_track_upload(fields: dict, files: dict) -> dict:
     tracks = load_tracks_config()
     if any(track.get("id") == track_id for track in tracks):
         raise ValueError("Track ID already exists")
-    for key in ["zip", "xml", "html"]:
+    for key in SOURCE_KEYS:
         if key not in files or not getattr(files[key], "filename", ""):
             raise ValueError(f"{key} file is required")
 
@@ -545,8 +610,10 @@ def add_track_upload(fields: dict, files: dict) -> dict:
     pdf_dir.mkdir(parents=True, exist_ok=True)
 
     saved_paths = {}
-    for key in ["zip", "xml", "html"]:
+    for key in SOURCE_KEYS:
         saved_paths[key] = _save_uploaded_file(files[key], input_dir)
+    if files.get("copyright_html") is not None and getattr(files["copyright_html"], "filename", ""):
+        saved_paths["copyright_html"] = _save_uploaded_file(files["copyright_html"], input_dir)
 
     checklist_ids = parse_checklist_ids(
         fields.get("checklist_ids"),
@@ -561,6 +628,8 @@ def add_track_upload(fields: dict, files: dict) -> dict:
         "pdf_dir": _relative_path(pdf_dir),
         "checklist_ids": checklist_ids,
     }
+    if "copyright_html" in saved_paths:
+        track["copyright_html"] = _relative_path(saved_paths["copyright_html"])
     tracks.append(track)
     save_tracks_config(tracks)
     return {"ok": True, "track": track}
@@ -574,9 +643,9 @@ def update_track_files(track_id: str, files: dict) -> dict:
     if not track:
         raise KeyError(track_id)
 
-    replacement_keys = [key for key in ["zip", "xml", "html"] if key in files and getattr(files[key], "filename", "")]
+    replacement_keys = [key for key in [*SOURCE_KEYS, *OPTIONAL_SOURCE_KEYS] if key in files and getattr(files[key], "filename", "")]
     if not replacement_keys:
-        raise ValueError("Select at least one replacement ZIP, XML, or HotCRP HTML file")
+        raise ValueError("Select at least one replacement ZIP, XML, HotCRP HTML, or e-Right file")
 
     base_dir = TRACK_DATA_DIR / track_id
     input_dir = base_dir / "inputs"
@@ -733,6 +802,7 @@ def create_follow_up_review(track_id: str, payload: dict, files: Optional[dict] 
     child_pdf_dir = _resolve_review_source_path(review_assets["pdf_dir"], "pdf_dir")
     xml_papers = load_xml_papers(child_xml_path)
     html_papers, _ = load_hotcrp_html(child_html_path)
+    copyright_papers = _load_copyright_papers(review_assets)
     current_review = {
         "paper_ids": issue_paper_ids,
         "papers": {
@@ -743,7 +813,7 @@ def create_follow_up_review(track_id: str, payload: dict, files: Optional[dict] 
             for paper_id in issue_paper_ids
         },
     }
-    current_records = _build_review_records(track, current_review, xml_papers, html_papers, child_pdf_dir, child_review_id)
+    current_records = _build_review_records(track, current_review, xml_papers, html_papers, child_pdf_dir, copyright_papers, child_review_id)
     current_records_by_id = {record["id"]: record for record in current_records}
 
     child_review = {
@@ -797,6 +867,7 @@ def rerun_track_checks(track_id: str, review_id: Optional[str] = None) -> dict:
     ensure_sample_pdfs(zip_path, pdf_dir)
     xml_papers = load_xml_papers(xml_path)
     html_papers, _ = load_hotcrp_html(html_path)
+    copyright_papers = _load_copyright_papers(review_paths)
     fresh_review = {
         "paper_ids": review.get("paper_ids", []),
         "papers": {
@@ -807,7 +878,7 @@ def rerun_track_checks(track_id: str, review_id: Optional[str] = None) -> dict:
             for paper_id in review.get("paper_ids", [])
         },
     }
-    refreshed_records = _build_review_records(track, fresh_review, xml_papers, html_papers, pdf_dir, review.get("id", ""))
+    refreshed_records = _build_review_records(track, fresh_review, xml_papers, html_papers, pdf_dir, copyright_papers, review.get("id", ""))
     refreshed_by_id = {record["id"]: record for record in refreshed_records}
     for paper_id in review.get("paper_ids", []):
         current_record = refreshed_by_id.get(paper_id)
@@ -824,8 +895,8 @@ def rerun_track_checks(track_id: str, review_id: Optional[str] = None) -> dict:
 
 
 def update_review_files(track_id: str, review_id: str, files: dict) -> dict:
-    if not any(key in files and getattr(files[key], "filename", "") for key in ["zip", "xml", "html"]):
-        raise ValueError("Select at least one replacement ZIP, XML, or HotCRP HTML file")
+    if not any(key in files and getattr(files[key], "filename", "") for key in [*SOURCE_KEYS, *OPTIONAL_SOURCE_KEYS]):
+        raise ValueError("Select at least one replacement ZIP, XML, HotCRP HTML, or e-Right file")
     track = find_track(track_id)
     if not track:
         raise KeyError(track_id)
@@ -941,12 +1012,16 @@ def _is_app_managed_track_dir(track: dict, track_id: str) -> bool:
         track_path(track, "zip").resolve(),
         track_path(track, "pdf_dir").resolve(),
     ]
-    return (
+    managed = (
         managed_paths[0].parent == expected_input_dir
         and managed_paths[1].parent == expected_input_dir
         and managed_paths[2].parent == expected_input_dir
         and managed_paths[3] == expected_pdf_dir
     )
+    copyright_path = optional_track_path(track, "copyright_html")
+    if copyright_path:
+        managed = managed and copyright_path.resolve().parent == expected_input_dir
+    return managed
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -1186,8 +1261,9 @@ def load_track_data_for_review(track_id: str, review_id: Optional[str] = None) -
     ensure_sample_pdfs(track_zip, track_pdf_dir)
     root_xml_papers = load_xml_papers(track_path(track, "xml"))
     root_html_papers, _ = load_hotcrp_html(track_path(track, "html"))
+    root_copyright_papers = _load_copyright_papers(_review_snapshot(track))
     checklist_ids = parse_checklist_ids(track.get("checklist_ids"))
-    state = _ensure_root_review(state, track, root_xml_papers, root_html_papers, track_pdf_dir)
+    state = _ensure_root_review(state, track, root_xml_papers, root_html_papers, track_pdf_dir, root_copyright_papers)
     active_review = _review_or_default(state, review_id or None)
     if active_review.get("id") and active_review.get("id") != state.get("active_review_id"):
         state["active_review_id"] = active_review["id"]
@@ -1200,7 +1276,8 @@ def load_track_data_for_review(track_id: str, review_id: Optional[str] = None) -
     ensure_sample_pdfs(zip_path, pdf_dir)
     xml_papers = load_xml_papers(xml_path)
     html_papers, global_messages = load_hotcrp_html(html_path)
-    records = _build_review_records(track, active_review, xml_papers, html_papers, pdf_dir, active_review.get("id", ""))
+    copyright_papers = _load_copyright_papers(review_paths)
+    records = _build_review_records(track, active_review, xml_papers, html_papers, pdf_dir, copyright_papers, active_review.get("id", ""))
     if not active_review.get("paper_ids"):
         active_review["paper_ids"] = [record["id"] for record in records]
         for record in records:
@@ -1245,6 +1322,7 @@ def load_track_data_for_review(track_id: str, review_id: Optional[str] = None) -
             "hotcrp_html": Path(review_paths["html"]).name,
             "zip": Path(review_paths["zip"]).name,
             "pdf_dir": Path(review_paths["pdf_dir"]).name,
+            "copyright_html": Path(review_paths["copyright_html"]).name if review_paths.get("copyright_html") else "",
         },
     }
 

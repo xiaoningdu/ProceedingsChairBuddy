@@ -47,6 +47,23 @@ class HtmlPaper:
     paginated_pdf_href: str = ""
 
 
+@dataclass
+class CopyrightPaper:
+    paper_id: str
+    manuscript_id: str
+    acm_id: str = ""
+    title: str = ""
+    progress: str = ""
+    doi: str = ""
+    rights_doi: str = ""
+    isbn: str = ""
+    copyright_type: str = ""
+    copyright_date: str = ""
+    paper_type: str = ""
+    dl_paper_type: str = ""
+    has_rights_detail: bool = False
+
+
 def _text(element: Optional[ElementTree.Element]) -> str:
     return "" if element is None or element.text is None else element.text.strip()
 
@@ -197,6 +214,105 @@ def load_hotcrp_html(path: Path) -> tuple[Dict[str, HtmlPaper], List[Dict[str, s
     return parser.papers, parser.global_messages
 
 
+class ERightParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.cells: Dict[str, str] = {}
+        self.inputs: Dict[str, str] = {}
+        self._cell_id = ""
+        self._cell_text: List[str] = []
+
+    def handle_starttag(self, tag: str, attrs_list) -> None:
+        attrs = dict(attrs_list)
+        if tag == "td" and attrs.get("id"):
+            cell_id = attrs["id"]
+            if re.match(r"td_(?:title|manuscriptID|progress)_\d+$", cell_id):
+                self._cell_id = cell_id
+                self._cell_text = []
+        elif tag == "input":
+            input_id = attrs.get("id") or attrs.get("name")
+            if input_id:
+                self.inputs[input_id] = html.unescape(attrs.get("value", ""))
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "td" and self._cell_id:
+            self.cells[self._cell_id] = _clean_text(" ".join(self._cell_text))
+            self._cell_id = ""
+            self._cell_text = []
+
+    def handle_data(self, data: str) -> None:
+        if self._cell_id:
+            self._cell_text.append(data)
+
+
+class _PlainTextHtmlParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: List[str] = []
+
+    def handle_starttag(self, tag: str, attrs_list) -> None:
+        if tag in {"br", "p", "tr", "td", "li"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def load_eright(path: Path) -> Dict[str, CopyrightPaper]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    parser = ERightParser()
+    parser.feed(text)
+    detail_texts = {
+        row_id: _html_to_text(match.group(0))
+        for row_id, match in (
+            (match.group(1), match)
+            for match in re.finditer(
+                r'<td\b[^>]*\bid="fileDetailsTD_(\d+)"[^>]*>(?:(?!\bid="fileDetailsTD_).)*?</table>\s*</td>',
+                text,
+                re.IGNORECASE | re.DOTALL,
+            )
+        )
+        if _clean_text(_html_to_text(match.group(0)))
+    }
+
+    row_ids = set()
+    for key in list(parser.cells) + list(parser.inputs):
+        match = re.search(r"_(\d+)$", key)
+        if match:
+            row_ids.add(match.group(1))
+
+    papers: Dict[str, CopyrightPaper] = {}
+    for row_id in sorted(row_ids, key=lambda value: int(value)):
+        manuscript_id = _first_nonempty(
+            parser.cells.get(f"td_manuscriptID_{row_id}", ""),
+            parser.inputs.get(f"rowManuscriptID_{row_id}", ""),
+        )
+        if not manuscript_id:
+            continue
+        paper_id = _paper_id_from_manuscript(manuscript_id)
+        detail_text = detail_texts.get(row_id, "")
+        paper = CopyrightPaper(
+            paper_id=paper_id,
+            manuscript_id=manuscript_id,
+            acm_id=parser.inputs.get(f"paperID_{row_id}", row_id),
+            title=parser.cells.get(f"td_title_{row_id}", ""),
+            progress=_first_nonempty(
+                parser.inputs.get(f"progressName_{row_id}", ""),
+                parser.cells.get(f"td_progress_{row_id}", ""),
+            ),
+            doi=parser.inputs.get(f"rowDOI_{row_id}", ""),
+            rights_doi=_extract_latex_value(detail_text, "acmDOI"),
+            isbn=_extract_latex_value(detail_text, "acmISBN") or _extract_prefixed_value(detail_text, "ACM ISBN"),
+            copyright_type=_extract_copyright_type(detail_text),
+            copyright_date=_extract_eright_detail(detail_text, "Copyright Date"),
+            paper_type=_extract_eright_detail(detail_text, "Paper Type"),
+            dl_paper_type=_extract_eright_detail(detail_text, "DL Paper Type"),
+            has_rights_detail=bool(detail_text and "Rights Statement:" in detail_text),
+        )
+        papers[manuscript_id.lower()] = paper
+    return papers
+
+
 def ensure_sample_pdfs(zip_path: Path, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     if any(output_dir.glob("*.pdf")):
@@ -246,3 +362,48 @@ def _parse_int(value: str) -> Optional[int]:
 
 def _clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(value)).strip()
+
+
+def _html_to_text(value: str) -> str:
+    parser = _PlainTextHtmlParser()
+    parser.feed(value)
+    return html.unescape("".join(parser.parts))
+
+
+def _paper_id_from_manuscript(value: str) -> str:
+    match = re.search(r"p(\d+)$", value.strip(), re.IGNORECASE)
+    return match.group(1) if match else ""
+
+
+def _extract_latex_value(text: str, command: str) -> str:
+    match = re.search(rf"\\{re.escape(command)}\{{([^}}]+)\}}", text)
+    return _clean_text(match.group(1)) if match else ""
+
+
+def _extract_prefixed_value(text: str, prefix: str) -> str:
+    match = re.search(rf"{re.escape(prefix)}\s+([^\s]+)", text, re.IGNORECASE)
+    return _clean_text(match.group(1)) if match else ""
+
+
+def _extract_copyright_type(text: str) -> str:
+    if re.search(r"\bCC[- ]BY\b", text, re.IGNORECASE):
+        return "CC-BY"
+    setcopyright = _extract_latex_value(text, "setcopyright")
+    cctype = _extract_latex_value(text, "setcctype")
+    if setcopyright.lower() == "cc" and cctype:
+        return "CC-" + cctype.upper()
+    if setcopyright:
+        return setcopyright
+    return ""
+
+
+def _extract_eright_detail(text: str, label: str) -> str:
+    match = re.search(rf"{re.escape(label)}:\s*(.+?)(?=\n\s*[A-Z][A-Za-z /-]+:|\n\s*Rights Statement:|$)", text, re.DOTALL)
+    return _clean_text(match.group(1)) if match else ""
+
+
+def _first_nonempty(*values: str) -> str:
+    for value in values:
+        if value:
+            return value
+    return ""

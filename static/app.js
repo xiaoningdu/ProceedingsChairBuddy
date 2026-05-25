@@ -9,7 +9,9 @@ const DEFAULT_CHECKLIST_ITEMS = [
   {id: "hotcrp_references", label: "References added on HotCRP"},
   {id: "source_files", label: "Source files submitted"},
   {id: "proceeding_messages", label: "Other issues"},
-  {id: "pdf_copyright_isbn", label: "PDF copyright information includes ISBN"},
+  {id: "copyright_doi_matches_pdf", label: "PDF DOI matches e-Right"},
+  {id: "copyright_isbn_matches_pdf", label: "PDF ISBN matches e-Right"},
+  {id: "copyright_type_matches_pdf", label: "PDF copyright type matches e-Right"},
   {id: "pdf_exists", label: "Paper PDF provided"},
   {id: "pdf_page_numbers", label: "PDF has no visible page numbers"},
   {id: "latest_acm_template", label: "Latest ACM template used"},
@@ -17,6 +19,8 @@ const DEFAULT_CHECKLIST_ITEMS = [
   {id: "last_page_balanced", label: "Last page balanced"},
   {id: "track_page_limit", label: "Track-specific page limit followed"}
 ];
+
+const RETIRED_CHECKLIST_IDS = new Set(["pdf_copyright_isbn"]);
 
 let state = {
   tracks: [],
@@ -120,7 +124,8 @@ function showAddTrackMessage(message) {
 function renderAddTrackChecklist() {
   const selectedIds = new Set(addTrackChecklistInputs().filter(input => input.checked).map(input => input.value));
   const hadRenderedItems = addTrackChecklistInputs().length > 0;
-  els.addTrackChecklist.replaceChildren(...state.checklistItems.map(item => {
+  const visibleItems = state.checklistItems.filter(item => !RETIRED_CHECKLIST_IDS.has(item.id));
+  els.addTrackChecklist.replaceChildren(...visibleItems.map(item => {
     const label = document.createElement("label");
     label.className = "checklistOption";
 
@@ -172,7 +177,7 @@ async function openTrack(trackId, reviewId = null) {
   state.submissions = data.submissions;
   state.submissionFilter = "all";
   const sources = data.sources;
-  els.sourceSummary.textContent = `${data.track.name} · ${data.review.label} · Sources: ${sources.xml}, ${sources.hotcrp_html}, ${sources.zip}`;
+  els.sourceSummary.textContent = `${data.track.name} · ${data.review.label} · Sources: ${sourceSummaryText(sources)}`;
   updateSubmissionCount();
   renderReviewChain();
   updateReviewControls();
@@ -357,10 +362,16 @@ function createReviewPanel(track, review) {
 
 function reviewSourceText(review) {
   const sources = review.sources || {};
-  return [sources.zip, sources.xml, sources.html]
+  return [sources.zip, sources.xml, sources.html, sources.copyright_html]
     .map(source => source ? source.split("/").pop() : "")
     .filter(Boolean)
     .join(" · ") || "No source snapshot available";
+}
+
+function sourceSummaryText(sources) {
+  return [sources.xml, sources.hotcrp_html, sources.zip, sources.copyright_html]
+    .filter(Boolean)
+    .join(", ");
 }
 
 function createFollowUpForm(track, review) {
@@ -374,9 +385,10 @@ function createFollowUpForm(track, review) {
   uploadPanel.append(
     fileField("zip", "ZIP", ".zip,application/zip"),
     fileField("xml", "TOC XML", ".xml,text/xml,application/xml"),
-    fileField("html", "HotCRP HTML", ".html,.htm,text/html")
+    fileField("html", "HotCRP HTML", ".html,.htm,text/html"),
+    fileField("copyright_html", "e-Right HTML", ".html,.htm,text/html")
   );
-  uploadPanel.querySelectorAll('input[type="file"]').forEach(input => {
+  uploadPanel.querySelectorAll('input[name="zip"], input[name="xml"], input[name="html"]').forEach(input => {
     input.required = true;
   });
 
@@ -413,7 +425,8 @@ function createUpdateReviewPanel(track, review) {
   form.append(
     fileField("zip", "Replacement ZIP", ".zip,application/zip"),
     fileField("xml", "Replacement TOC XML", ".xml,text/xml,application/xml"),
-    fileField("html", "Replacement HotCRP HTML", ".html,.htm,text/html")
+    fileField("html", "Replacement HotCRP HTML", ".html,.htm,text/html"),
+    fileField("copyright_html", "Replacement e-Right HTML", ".html,.htm,text/html")
   );
 
   const actions = document.createElement("span");
@@ -557,7 +570,7 @@ async function createTrackFollowUp(event, track, review, button, message) {
   const xml = form.querySelector('input[name="xml"]');
   const html = form.querySelector('input[name="html"]');
   if (!zip?.files?.length || !xml?.files?.length || !html?.files?.length) {
-    message.textContent = "Upload ZIP, XML, and HTML before creating the follow-up.";
+    message.textContent = "Upload ZIP, XML, and HotCRP HTML before creating the follow-up.";
     return;
   }
   const formData = new FormData(form);
@@ -830,6 +843,7 @@ async function loadPdf(url) {
 function renderMetadata(submission) {
   const xml = submission.xml;
   const hotcrp = submission.hotcrp;
+  const copyright = submission.copyright;
   const authors = xml?.authors?.map(author => {
     const marker = author.contact_author ? " (contact)" : "";
     return `${author.name}${marker}`;
@@ -843,6 +857,10 @@ function renderMetadata(submission) {
   addMeta(dl, "Page count", hotcrp?.page_count ?? submission.pdf.page_count_estimate ?? "Unavailable");
   addMeta(dl, "Authors", authors);
   addMeta(dl, "Source files", hotcrp?.source_files?.map(file => file.name).join(", ") || "None found");
+  addMeta(dl, "e-Right ID", copyright?.manuscript_id || "Unavailable");
+  addMeta(dl, "Publication DOI", copyright?.rights_doi || copyright?.doi || "Unavailable");
+  addMeta(dl, "ISBN", copyright?.isbn || "Unavailable");
+  addMeta(dl, "Copyright", copyright?.copyright_type || "Unavailable");
   els.metadataContent.replaceChildren(dl);
 }
 
@@ -983,6 +1001,9 @@ function renderChecks(checks) {
     const footer = document.createElement("div");
     footer.className = "checkFooter";
 
+    const sourceRow = document.createElement("div");
+    sourceRow.className = "checkSourceRow";
+
     const source = document.createElement("span");
     source.className = "source";
     source.textContent = `Source: ${check.source}`;
@@ -990,7 +1011,14 @@ function renderChecks(checks) {
     const saveStatus = document.createElement("span");
     saveStatus.className = "saveStatus";
     saveStatus.setAttribute("aria-live", "polite");
-    footer.append(source, saveStatus);
+    sourceRow.append(source, saveStatus);
+    footer.append(sourceRow);
+    if (check.note) {
+      const note = document.createElement("div");
+      note.className = "checkNote";
+      note.textContent = `Note: ${check.note}`;
+      footer.append(note);
+    }
 
     header.append(titleWrap, status);
     item.append(header, evidence, footer);
