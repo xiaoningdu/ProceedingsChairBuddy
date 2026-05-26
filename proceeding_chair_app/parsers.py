@@ -386,12 +386,13 @@ def _extract_prefixed_value(text: str, prefix: str) -> str:
 
 
 def _extract_copyright_type(text: str) -> str:
-    if re.search(r"\bCC[- ]BY\b", text, re.IGNORECASE):
-        return "CC-BY"
     setcopyright = _extract_latex_value(text, "setcopyright")
     cctype = _extract_latex_value(text, "setcctype")
     if setcopyright.lower() == "cc" and cctype:
         return "CC-" + cctype.upper()
+    visible_license = re.search(r"\bCC[- ]BY(?:[- ][A-Z]+)*\b", text, re.IGNORECASE)
+    if visible_license:
+        return visible_license.group(0).upper().replace(" ", "-")
     if setcopyright:
         return setcopyright
     return ""

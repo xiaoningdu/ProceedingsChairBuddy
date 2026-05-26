@@ -60,6 +60,7 @@ const els = {
   completedToggle: document.querySelector("#completedToggle"),
   backToTracks: document.querySelector("#backToTracks"),
   rerunChecks: document.querySelector("#rerunChecks"),
+  markAllFinished: document.querySelector("#markAllFinished"),
   exportCsv: document.querySelector("#exportCsv")
 };
 
@@ -182,6 +183,7 @@ async function openTrack(trackId, reviewId = null) {
   renderReviewChain();
   updateReviewControls();
   els.rerunChecks.hidden = false;
+  els.markAllFinished.hidden = false;
   els.exportCsv.hidden = false;
   els.backToTracks.hidden = false;
   els.homeView.hidden = true;
@@ -216,6 +218,7 @@ function showHome() {
   updateReviewControls();
   els.reviewChainBar.hidden = true;
   els.rerunChecks.hidden = true;
+  els.markAllFinished.hidden = true;
   els.exportCsv.hidden = true;
   els.backToTracks.hidden = true;
   els.homeView.hidden = false;
@@ -560,6 +563,50 @@ async function rerunChecks() {
   }
 }
 
+async function markAllFinished() {
+  if (!state.currentTrack || !state.currentReview) {
+    return;
+  }
+  if (reviewIsLocked()) {
+    alert("This review is locked because it already has a follow-up.");
+    return;
+  }
+  const unfinished = state.submissions.filter(submission => !submission.completed);
+  if (!unfinished.length) {
+    return;
+  }
+  const reviewLabel = state.currentReview?.label || "the selected review";
+  const confirmed = confirm(`Mark all ${state.submissions.length} papers in ${reviewLabel} as finished?`);
+  if (!confirmed) {
+    return;
+  }
+
+  clearTimeout(state.saveTimer);
+  els.markAllFinished.disabled = true;
+  const originalText = els.markAllFinished.textContent;
+  els.markAllFinished.textContent = "Marking...";
+  try {
+    for (const submission of unfinished) {
+      submission.completed = true;
+      await saveSubmission(submission);
+    }
+    renderSubmissionList();
+    const current = selectedSubmission();
+    if (current) {
+      els.completedToggle.checked = true;
+    }
+    updateSubmissionCount();
+    updateReviewControls();
+    await ensureVisibleSelection();
+  } catch (error) {
+    alert(cleanErrorMessage(error.message));
+    await openTrack(state.currentTrack.id, state.currentReview?.id || null);
+  } finally {
+    els.markAllFinished.textContent = originalText;
+    updateReviewControls();
+  }
+}
+
 async function createTrackFollowUp(event, track, review, button, message) {
   event.preventDefault();
   if (!review) {
@@ -672,6 +719,12 @@ function updateReviewControls() {
   const locked = reviewIsLocked();
   els.rerunChecks.disabled = locked;
   els.rerunChecks.title = locked ? "This review is locked because it already has a follow-up." : "";
+  els.markAllFinished.disabled = locked || !state.submissions.length || state.submissions.every(submission => submission.completed);
+  els.markAllFinished.title = locked
+    ? "This review is locked because it already has a follow-up."
+    : state.submissions.every(submission => submission.completed)
+      ? "All papers in this review are already finished."
+      : "";
   els.completedToggle.disabled = locked;
 }
 
@@ -1169,6 +1222,9 @@ async function saveSubmission(submission) {
 }
 
 function exportCsv() {
+  const issueSubmissions = state.submissions.filter(submission =>
+    submission.checks.some(check => check.status === "issue")
+  );
   const checkLabels = [];
   for (const submission of state.submissions) {
     for (const check of submission.checks) {
@@ -1180,7 +1236,7 @@ function exportCsv() {
   }
 
   const rows = [["paper_id", "issue_summary", ...checkLabels]];
-  for (const submission of state.submissions) {
+  for (const submission of issueSubmissions) {
     const checksByLabel = new Map(submission.checks.map((check, index) => [`${index + 1}. ${check.label}`, check]));
     const issueSummary = submission.checks
       .filter(check => check.status === "issue")
@@ -1234,6 +1290,7 @@ els.completedToggle.addEventListener("change", () => {
   }
   submission.completed = els.completedToggle.checked;
   renderSubmissionList();
+  updateReviewControls();
   scheduleSaveSubmission(submission);
   ensureVisibleSelection();
 });
@@ -1248,6 +1305,7 @@ els.backToTracks.addEventListener("click", async () => {
   await loadTracks();
 });
 els.rerunChecks.addEventListener("click", rerunChecks);
+els.markAllFinished.addEventListener("click", markAllFinished);
 els.exportCsv.addEventListener("click", exportCsv);
 els.addTrackForm.addEventListener("submit", addTrack);
 els.addTrackForm.addEventListener("reset", () => setTimeout(syncSelectAllChecks, 0));

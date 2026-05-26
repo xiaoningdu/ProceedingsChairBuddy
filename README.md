@@ -13,6 +13,7 @@ The current version is built for proceedings prepared through HotCRP.
 - Choose which checklist items apply when adding a track.
 - Review each paper with the PDF, metadata, issue summary, and editable checklist side by side.
 - Save per-paper finished/open state, checklist result overrides, and edited comments.
+- Mark every paper in a review round as finished when a chair has completed the round.
 - Create follow-up review rounds that carry forward only papers with issues.
 - Lock earlier review rounds once they have a follow-up, so comments and reruns cannot be changed accidentally.
 - Rerun checks for the currently selected review round only, with a confirmation that current check results will be overwritten.
@@ -95,7 +96,7 @@ Follow-up review rounds preserve the prior round as history. A review round with
 
 ## CSV Export
 
-CSV export creates one row per paper. The columns are:
+CSV export creates one row per paper with at least one current issue. Papers with zero issues are omitted. The columns are:
 
 - `paper_id`
 - `issue_summary`

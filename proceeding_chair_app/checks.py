@@ -540,17 +540,31 @@ def _compact_identifier(value: str) -> str:
 def _copyright_type_in_text(expected: str, pdf_text: str) -> bool:
     expected_normalized = expected.strip().upper().replace(" ", "-")
     text_lower = pdf_text.lower()
-    if expected_normalized == "CC-BY":
+    compact_text = _compact_identifier(pdf_text)
+    if expected_normalized == "CC-BY-NC-ND":
         return any(
             phrase in text_lower
             for phrase in [
-                "cc-by",
-                "cc by",
-                "creative commons attribution",
-                "creativecommons.org/licenses/by",
+                "cc-by-nc-nd",
+                "cc by-nc-nd",
+                "creativecommons.org/licenses/by-nc-nd",
+                "creative commons attribution-noncommercial",
+                "creative commons attribution noncommercial",
+            ]
+        ) or (
+            "creativecommonsattributionnoncommercial" in compact_text
+            and ("noderivatives" in compact_text or "noderivs" in compact_text)
+        )
+    if expected_normalized == "CC-BY":
+        return bool(re.search(r"\bcc[- ]by\b(?![- ]nc)", text_lower)) or any(
+            phrase in text_lower
+            for phrase in [
+                "creativecommons.org/licenses/by/4.0",
+                "creative commons attribution international",
+                "creative commons attribution 4.0 international",
             ]
         )
-    return _compact_identifier(expected_normalized) in _compact_identifier(pdf_text)
+    return _compact_identifier(expected_normalized) in compact_text
 
 
 def _first_nonempty(*values: str) -> str:
