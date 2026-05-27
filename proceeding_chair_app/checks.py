@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -193,10 +194,13 @@ def _authors_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_error:
         return _check("authors_pdf_vs_xml", label, "unavailable", "No metadata found.", "PDF + XML")
     if not pdf_text:
         return _check("authors_pdf_vs_xml", label, "manual", "PDF text extraction is unavailable.", "PDF + XML")
+    author_region = _pdf_author_region(xml_paper, pdf_text)
+    if not author_region:
+        return _check("authors_pdf_vs_xml", label, "manual", "Could not identify the PDF author block near the top of the extracted PDF text.", "PDF + XML")
     missing = [
         _author_position(author, index)
         for index, author in enumerate(xml_paper.authors, start=1)
-        if not _words_in_order(author.name, pdf_text)
+        if not _author_name_in_pdf_author_region(author.name, author_region)
     ]
     if missing:
         return _check("authors_pdf_vs_xml", label, "issue", "Authors whose names in PDF don't match those in HotCRP metadata: " + ", ".join(missing), "PDF + XML")
@@ -209,12 +213,26 @@ def _affiliations_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_e
         return _check("affiliations_pdf_vs_xml", label, "unavailable", "No metadata found.", "PDF + XML")
     if not pdf_text:
         return _check("affiliations_pdf_vs_xml", label, "manual", "PDF text extraction is unavailable.", "PDF + XML")
+    author_affiliations = _pdf_author_affiliation_segments(xml_paper, pdf_text)
+    if not author_affiliations:
+        return _check("affiliations_pdf_vs_xml", label, "manual", "Could not align PDF affiliations with individual authors near the top of the extracted PDF text.", "PDF + XML")
     missing = []
+    unaligned = []
     for index, author in enumerate(xml_paper.authors, start=1):
-        if author.affiliation and not _words_in_order(author.affiliation, pdf_text):
+        if not author.affiliation:
+            continue
+        pdf_affiliation = author_affiliations.get(index - 1, "")
+        if not pdf_affiliation:
+            unaligned.append(_author_position(author, index))
+        elif not _words_in_order(author.affiliation, pdf_affiliation):
             missing.append(_author_position(author, index))
     if missing:
-        return _check("affiliations_pdf_vs_xml", label, "issue", "Authors whose affiliations in PDF don't match those in HotCRP metadata: " + ", ".join(missing), "PDF + XML")
+        detail = "Authors whose affiliations in PDF don't match those in HotCRP metadata: " + ", ".join(missing)
+        if unaligned:
+            detail += ". Could not align PDF affiliations for metadata author positions: " + ", ".join(unaligned)
+        return _check("affiliations_pdf_vs_xml", label, "issue", detail, "PDF + XML")
+    if unaligned:
+        return _check("affiliations_pdf_vs_xml", label, "manual", "Could not align PDF affiliations for metadata author positions: " + ", ".join(unaligned), "PDF + XML")
     return _check("affiliations_pdf_vs_xml", label, "pass", "All metadata affiliations match those found in extracted PDF text.", "PDF + XML")
 
 
@@ -467,15 +485,14 @@ def _words_in_order(needle: str, haystack: str) -> bool:
 
 
 def _pdf_title_candidate(xml_paper: XmlPaper, pdf_text: str) -> str:
+    return " ".join(_pdf_title_lines(xml_paper, pdf_text))
+
+
+def _pdf_title_lines(xml_paper: XmlPaper, pdf_text: str) -> List[str]:
     title_words = set(_meaningful_words(xml_paper.title))
     if not title_words:
-        return ""
-    first_page = pdf_text.split("\f", 1)[0]
-    lines = [
-        re.sub(r"\s+", " ", line).strip()
-        for line in first_page.splitlines()
-    ]
-    lines = [line for line in lines if line]
+        return []
+    lines = _first_page_text_lines(pdf_text)
     title_lines: List[str] = []
     for line in lines[:30]:
         line_words = _meaningful_words(line)
@@ -491,7 +508,117 @@ def _pdf_title_candidate(xml_paper: XmlPaper, pdf_text: str) -> str:
             continue
         if title_lines:
             break
-    return " ".join(title_lines)
+    return title_lines
+
+
+def _pdf_author_region(xml_paper: XmlPaper, pdf_text: str) -> str:
+    return " ".join(re.sub(r"\s+", " ", line).strip() for line in _pdf_author_raw_lines(xml_paper, pdf_text) if line.strip())
+
+
+def _pdf_author_affiliation_segments(xml_paper: XmlPaper, pdf_text: str) -> Dict[int, str]:
+    groups = _pdf_author_raw_line_groups(xml_paper, pdf_text)
+    author_segments: Dict[int, str] = {}
+    next_author_index = 0
+    for group in groups:
+        name_line_index = -1
+        spans = []
+        for line_index, line in enumerate(group):
+            line_spans = []
+            for author_index in range(next_author_index, len(xml_paper.authors)):
+                span = _author_name_span_in_line(line, xml_paper.authors[author_index].name)
+                if span:
+                    line_spans.append((author_index, span[0], span[1]))
+            if line_spans:
+                name_line_index = line_index
+                spans = sorted(line_spans, key=lambda value: value[1])
+                break
+        if name_line_index < 0 or not spans:
+            continue
+
+        column_spans = _layout_chunk_spans(group[name_line_index])
+        if len(column_spans) < len(spans):
+            column_spans = [(start, end) for _, start, end in spans]
+        group_width = max(len(line) for line in group)
+        centers = [(start + end) / 2 for start, end in column_spans]
+        mapped_author_indexes = []
+        for span_index, (start, end) in enumerate(column_spans):
+            author_index = next_author_index + span_index
+            if author_index >= len(xml_paper.authors):
+                break
+            mapped_author_indexes.append(author_index)
+            left = 0 if span_index == 0 else int((centers[span_index - 1] + centers[span_index]) / 2)
+            right = group_width if span_index == len(column_spans) - 1 else int((centers[span_index] + centers[span_index + 1]) / 2)
+            pieces = []
+            for line in group[name_line_index + 1:]:
+                piece = line[left:right].strip()
+                if piece:
+                    pieces.append(piece)
+            author_segments[author_index] = " ".join(pieces)
+        if mapped_author_indexes:
+            next_author_index = max(mapped_author_indexes) + 1
+    return author_segments
+
+
+def _pdf_author_raw_line_groups(xml_paper: XmlPaper, pdf_text: str) -> List[List[str]]:
+    groups: List[List[str]] = []
+    current: List[str] = []
+    for line in _pdf_author_raw_lines(xml_paper, pdf_text):
+        if line.strip():
+            current.append(line.rstrip())
+        elif current:
+            groups.append(current)
+            current = []
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _pdf_author_raw_lines(xml_paper: XmlPaper, pdf_text: str) -> List[str]:
+    raw_lines = _first_page_raw_lines(pdf_text)
+    lines = _first_page_text_lines(pdf_text)
+    title_lines = _pdf_title_lines(xml_paper, pdf_text)
+    if not raw_lines or not lines:
+        return []
+    start_index = -1
+    if title_lines:
+        start_index = _find_subsequence_index(lines, title_lines)
+    raw_start_index = 0
+    if start_index >= 0:
+        nonempty_raw_indexes = [index for index, line in enumerate(raw_lines) if line.strip()]
+        raw_start_index = nonempty_raw_indexes[start_index + len(title_lines)] if start_index + len(title_lines) < len(nonempty_raw_indexes) else len(raw_lines)
+    author_lines: List[str] = []
+    for line in raw_lines[raw_start_index:]:
+        normalized_line = re.sub(r"\s+", " ", line).strip()
+        if normalized_line and _looks_like_author_block_boundary(normalized_line):
+            break
+        author_lines.append(line)
+    return author_lines
+
+
+def _first_page_raw_lines(pdf_text: str) -> List[str]:
+    return [line.rstrip("\r\n") for line in pdf_text.split("\f", 1)[0].splitlines()]
+
+
+def _first_page_text_lines(pdf_text: str) -> List[str]:
+    first_page = pdf_text.split("\f", 1)[0]
+    return [
+        line
+        for line in (
+            re.sub(r"\s+", " ", line).strip()
+            for line in first_page.splitlines()
+        )
+        if line
+    ]
+
+
+def _find_subsequence_index(values: List[str], subsequence: List[str]) -> int:
+    if not subsequence:
+        return -1
+    limit = len(values) - len(subsequence) + 1
+    for index in range(max(limit, 0)):
+        if values[index:index + len(subsequence)] == subsequence:
+            return index
+    return -1
 
 
 def _looks_like_title_boundary(line: str, xml_paper: XmlPaper) -> bool:
@@ -505,8 +632,90 @@ def _looks_like_title_boundary(line: str, xml_paper: XmlPaper) -> bool:
     return any(_words_in_order(author.name, line) for author in xml_paper.authors if author.name)
 
 
+def _looks_like_author_block_boundary(line: str) -> bool:
+    lower = line.lower()
+    if lower in {"abstract", "keywords", "ccs concepts"}:
+        return True
+    return lower.startswith(("abstract ", "keywords ", "acm reference format", "ccs concepts"))
+
+
+def _author_name_in_pdf_author_region(name: str, author_region: str) -> bool:
+    name_words = _author_name_words(name)
+    region_words = _author_name_words(author_region)
+    if _contains_contiguous_words(name_words, region_words):
+        return True
+    return _short_author_name_in_region(name_words, region_words)
+
+
+def _author_name_span_in_line(line: str, name: str) -> Optional[tuple[int, int]]:
+    name_words = _author_name_words(name)
+    tokens = _line_word_tokens(line)
+    if not name_words or not tokens:
+        return None
+    limit = len(tokens) - len(name_words) + 1
+    for index in range(max(limit, 0)):
+        if [token[0] for token in tokens[index:index + len(name_words)]] == name_words:
+            return tokens[index][1], tokens[index + len(name_words) - 1][2]
+    if len(name_words) >= 2:
+        first_word = name_words[0]
+        last_word = name_words[-1]
+        first_positions = [index for index, token in enumerate(tokens) if token[0] == first_word]
+        last_positions = [index for index, token in enumerate(tokens) if token[0] == last_word]
+        for first_index in first_positions:
+            for last_index in last_positions:
+                if 0 < last_index - first_index <= 8:
+                    return tokens[first_index][1], tokens[last_index][2]
+    return None
+
+
 def _title_words_match(expected: str, actual: str) -> bool:
     return _meaningful_words(expected) == _meaningful_words(actual)
+
+
+def _contains_contiguous_words(needle_words: List[str], haystack_words: List[str]) -> bool:
+    if not needle_words:
+        return False
+    limit = len(haystack_words) - len(needle_words) + 1
+    for index in range(max(limit, 0)):
+        if haystack_words[index:index + len(needle_words)] == needle_words:
+            return True
+    return False
+
+
+def _short_author_name_in_region(name_words: List[str], region_words: List[str]) -> bool:
+    if len(name_words) != 2:
+        return False
+    first, last = name_words
+    first_positions = [index for index, word in enumerate(region_words) if word == first]
+    last_positions = [index for index, word in enumerate(region_words) if word == last]
+    return any(
+        0 < last_index - first_index <= 8
+        for first_index in first_positions
+        for last_index in last_positions
+    )
+
+
+def _author_name_words(value: str) -> List[str]:
+    words = []
+    for word in _meaningful_words(value):
+        words.append(re.sub(r"(?<=[a-z])[0-9]+$", "", word))
+    return [word for word in words if word]
+
+
+def _line_word_tokens(line: str) -> List[tuple[str, int, int]]:
+    tokens = []
+    for match in re.finditer(r"[^\W_]+", line, flags=re.UNICODE):
+        words = _author_name_words(match.group(0))
+        if words:
+            tokens.append((words[0], match.start(), match.end()))
+    return tokens
+
+
+def _layout_chunk_spans(line: str) -> List[tuple[int, int]]:
+    return [
+        (match.start(), match.end())
+        for match in re.finditer(r"\S(?:.*?\S)?(?=\s{2,}|$)", line)
+    ]
 
 
 def _meaningful_words(value: str) -> List[str]:
@@ -522,6 +731,11 @@ def _meaningful_words(value: str) -> List[str]:
         "⁸": "8",
         "⁹": "9",
     }))
+    value = "".join(
+        character
+        for character in unicodedata.normalize("NFKD", value)
+        if not unicodedata.combining(character)
+    )
     return [
         word
         for word in re.findall(r"[A-Za-z0-9]+", value.lower())
