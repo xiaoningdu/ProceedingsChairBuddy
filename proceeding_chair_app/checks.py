@@ -173,9 +173,18 @@ def _title_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_error: s
         return _check("title_pdf_vs_xml", label, "unavailable", "No metadata found.", "PDF + XML")
     if not pdf_text:
         return _check("title_pdf_vs_xml", label, "manual", "PDF text extraction is unavailable.", "PDF + XML")
-    if _words_in_order(xml_paper.title, pdf_text):
-        return _check("title_pdf_vs_xml", label, "pass", "The metadata title matches that found in extracted PDF text.", "PDF + XML")
-    return _check("title_pdf_vs_xml", label, "issue", "The metadata title doesn't match that found in extracted PDF text.", "PDF + XML")
+    pdf_title = _pdf_title_candidate(xml_paper, pdf_text)
+    if not pdf_title:
+        return _check("title_pdf_vs_xml", label, "manual", "Could not identify the PDF title near the top of the extracted PDF text.", "PDF + XML")
+    if _title_words_match(xml_paper.title, pdf_title):
+        return _check("title_pdf_vs_xml", label, "pass", "The metadata title matches the title found near the top of the extracted PDF text.", "PDF + XML")
+    return _check(
+        "title_pdf_vs_xml",
+        label,
+        "issue",
+        f"PDF title appears to be '{pdf_title}', but XML title is '{xml_paper.title}'.",
+        "PDF + XML",
+    )
 
 
 def _authors_check(xml_paper: Optional[XmlPaper], pdf_text: str, pdf_text_error: str) -> Dict:
@@ -457,7 +466,62 @@ def _words_in_order(needle: str, haystack: str) -> bool:
     return False
 
 
+def _pdf_title_candidate(xml_paper: XmlPaper, pdf_text: str) -> str:
+    title_words = set(_meaningful_words(xml_paper.title))
+    if not title_words:
+        return ""
+    first_page = pdf_text.split("\f", 1)[0]
+    lines = [
+        re.sub(r"\s+", " ", line).strip()
+        for line in first_page.splitlines()
+    ]
+    lines = [line for line in lines if line]
+    title_lines: List[str] = []
+    for line in lines[:30]:
+        line_words = _meaningful_words(line)
+        if not line_words:
+            continue
+        if _looks_like_title_boundary(line, xml_paper):
+            if title_lines:
+                break
+            continue
+        overlap = title_words.intersection(line_words)
+        if overlap:
+            title_lines.append(line)
+            continue
+        if title_lines:
+            break
+    return " ".join(title_lines)
+
+
+def _looks_like_title_boundary(line: str, xml_paper: XmlPaper) -> bool:
+    lower = line.lower()
+    if "@" in line:
+        return True
+    if lower in {"abstract", "keywords", "ccs concepts"}:
+        return True
+    if lower.startswith(("abstract ", "keywords ", "acm reference format", "ccs concepts")):
+        return True
+    return any(_words_in_order(author.name, line) for author in xml_paper.authors if author.name)
+
+
+def _title_words_match(expected: str, actual: str) -> bool:
+    return _meaningful_words(expected) == _meaningful_words(actual)
+
+
 def _meaningful_words(value: str) -> List[str]:
+    value = value.translate(str.maketrans({
+        "⁰": "0",
+        "¹": "1",
+        "²": "2",
+        "³": "3",
+        "⁴": "4",
+        "⁵": "5",
+        "⁶": "6",
+        "⁷": "7",
+        "⁸": "8",
+        "⁹": "9",
+    }))
     return [
         word
         for word in re.findall(r"[A-Za-z0-9]+", value.lower())
