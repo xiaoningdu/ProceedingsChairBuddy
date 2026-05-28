@@ -30,6 +30,7 @@ let state = {
   reviews: [],
   submissions: [],
   submissionFilter: "all",
+  submissionSearch: "",
   selectedId: null,
   saveTimer: null,
   pdfLoadToken: 0
@@ -47,9 +48,12 @@ const els = {
   sourceSummary: document.querySelector("#sourceSummary"),
   submissionCount: document.querySelector("#submissionCount"),
   submissionFilters: document.querySelector("#submissionFilters"),
+  submissionSearch: document.querySelector("#submissionSearch"),
   submissionList: document.querySelector("#submissionList"),
   paperTitle: document.querySelector("#paperTitle"),
   paperMeta: document.querySelector("#paperMeta"),
+  previousPaper: document.querySelector("#previousPaper"),
+  nextPaper: document.querySelector("#nextPaper"),
   openPdf: document.querySelector("#openPdf"),
   pdfViewer: document.querySelector("#pdfViewer"),
   pdfUnavailable: document.querySelector("#pdfUnavailable"),
@@ -177,6 +181,8 @@ async function openTrack(trackId, reviewId = null) {
   state.reviews = data.reviews || [];
   state.submissions = data.submissions;
   state.submissionFilter = "all";
+  state.submissionSearch = "";
+  els.submissionSearch.value = "";
   const sources = data.sources;
   els.sourceSummary.textContent = `${data.track.name} · ${data.review.label} · Sources: ${sourceSummaryText(sources)}`;
   updateSubmissionCount();
@@ -213,7 +219,9 @@ function showHome() {
   state.reviews = [];
   state.submissions = [];
   state.submissionFilter = "all";
+  state.submissionSearch = "";
   state.selectedId = null;
+  els.submissionSearch.value = "";
   els.sourceSummary.textContent = "";
   updateReviewControls();
   els.reviewChainBar.hidden = true;
@@ -646,6 +654,18 @@ function renderSubmissionList() {
   const visibleSubmissions = filteredSubmissions();
   updateSubmissionCount();
   updateSubmissionFilterButtons();
+  updatePaperNavControls();
+
+  if (!visibleSubmissions.length) {
+    const empty = document.createElement("div");
+    empty.className = "submissionEmpty";
+    empty.textContent = state.submissionSearch.trim()
+      ? "No papers match this search."
+      : "No papers match this filter.";
+    els.submissionList.replaceChildren(empty);
+    return;
+  }
+
   els.submissionList.replaceChildren(...visibleSubmissions.map(submission => {
     const button = document.createElement("button");
     button.type = "button";
@@ -729,18 +749,27 @@ function updateReviewControls() {
 }
 
 function filteredSubmissions() {
+  const query = state.submissionSearch.trim().toLowerCase();
   if (state.submissionFilter === "open") {
-    return state.submissions.filter(submission => !submission.completed);
+    return state.submissions.filter(submission => !submission.completed && matchesSubmissionSearch(submission, query));
   }
   if (state.submissionFilter === "finished") {
-    return state.submissions.filter(submission => submission.completed);
+    return state.submissions.filter(submission => submission.completed && matchesSubmissionSearch(submission, query));
   }
-  return state.submissions;
+  return state.submissions.filter(submission => matchesSubmissionSearch(submission, query));
+}
+
+function matchesSubmissionSearch(submission, query) {
+  if (!query) {
+    return true;
+  }
+  return String(submission.id).toLowerCase().includes(query)
+    || String(submission.title || "").toLowerCase().includes(query);
 }
 
 function updateSubmissionCount() {
   const visibleCount = filteredSubmissions().length;
-  els.submissionCount.textContent = state.submissionFilter === "all"
+  els.submissionCount.textContent = state.submissionFilter === "all" && !state.submissionSearch.trim()
     ? `${state.submissions.length} papers`
     : `${visibleCount}/${state.submissions.length} papers`;
 }
@@ -762,23 +791,71 @@ async function setSubmissionFilter(filter) {
   await ensureVisibleSelection();
 }
 
+async function setSubmissionSearch(query) {
+  state.submissionSearch = query;
+  renderSubmissionList();
+  await ensureVisibleSelection();
+}
+
+function updatePaperNavControls() {
+  const visibleSubmissions = filteredSubmissions();
+  const index = visibleSubmissions.findIndex(submission => submission.id === state.selectedId);
+  els.previousPaper.disabled = index <= 0;
+  els.nextPaper.disabled = index < 0 || index >= visibleSubmissions.length - 1;
+  els.previousPaper.title = index > 0
+    ? `Previous: #${visibleSubmissions[index - 1].id} ${visibleSubmissions[index - 1].title}`
+    : "";
+  els.nextPaper.title = index >= 0 && index < visibleSubmissions.length - 1
+    ? `Next: #${visibleSubmissions[index + 1].id} ${visibleSubmissions[index + 1].title}`
+    : "";
+}
+
+async function selectAdjacentSubmission(offset) {
+  const visibleSubmissions = filteredSubmissions();
+  if (!visibleSubmissions.length) {
+    updatePaperNavControls();
+    return;
+  }
+  const index = visibleSubmissions.findIndex(submission => submission.id === state.selectedId);
+  const nextIndex = index === -1
+    ? (offset > 0 ? 0 : visibleSubmissions.length - 1)
+    : index + offset;
+  const nextSubmission = visibleSubmissions[nextIndex];
+  if (!nextSubmission) {
+    updatePaperNavControls();
+    return;
+  }
+  await saveSelectedSubmission();
+  selectSubmission(nextSubmission.id, {saveFirst: false});
+  scrollSelectedSubmissionIntoView();
+}
+
+function scrollSelectedSubmissionIntoView() {
+  const selectedItem = Array.from(document.querySelectorAll(".submissionItem"))
+    .find(item => item.dataset.id === state.selectedId);
+  selectedItem?.scrollIntoView({block: "nearest"});
+}
+
 async function ensureVisibleSelection() {
   const visibleSubmissions = filteredSubmissions();
   const current = visibleSubmissions.find(submission => submission.id === state.selectedId);
   if (current) {
+    updatePaperNavControls();
     return;
   }
   await saveSelectedSubmission();
   if (visibleSubmissions.length) {
-    selectSubmission(visibleSubmissions[0].id);
+    selectSubmission(visibleSubmissions[0].id, {saveFirst: false});
     return;
   }
   state.selectedId = null;
   clearSubmission();
 }
 
-function selectSubmission(id) {
-  saveSelectedSubmission();
+function selectSubmission(id, options = {}) {
+  if (options.saveFirst !== false) {
+    saveSelectedSubmission();
+  }
   state.selectedId = id;
   document.querySelectorAll(".submissionItem").forEach(item => {
     item.classList.toggle("active", item.dataset.id === id);
@@ -789,6 +866,7 @@ function selectSubmission(id) {
     return;
   }
   renderSubmission(submission);
+  updatePaperNavControls();
 }
 
 function clearSubmission() {
@@ -803,6 +881,7 @@ function clearSubmission() {
   els.metadataContent.replaceChildren();
   els.issueSummary.replaceChildren();
   els.checklist.replaceChildren();
+  updatePaperNavControls();
 }
 
 function showResolvedPaper(paperId, title) {
@@ -818,6 +897,7 @@ function showResolvedPaper(paperId, title) {
   els.completedToggle.checked = false;
   els.completedToggle.disabled = true;
   els.checkSummary.textContent = "No issues in this review";
+  updatePaperNavControls();
   els.metadataContent.replaceChildren();
   els.issueSummary.replaceChildren();
   els.checklist.replaceChildren();
@@ -1299,6 +1379,15 @@ els.submissionFilters.addEventListener("click", event => {
   if (button) {
     setSubmissionFilter(button.dataset.filter);
   }
+});
+els.submissionSearch.addEventListener("input", event => {
+  setSubmissionSearch(event.target.value);
+});
+els.previousPaper.addEventListener("click", () => {
+  selectAdjacentSubmission(-1);
+});
+els.nextPaper.addEventListener("click", () => {
+  selectAdjacentSubmission(1);
 });
 els.backToTracks.addEventListener("click", async () => {
   await saveSelectedSubmission();

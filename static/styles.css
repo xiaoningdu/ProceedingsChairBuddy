@@ -544,6 +544,11 @@ button:disabled:hover {
   background: var(--panel);
 }
 
+.sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
 .reviewPane {
   border-right: 0;
   display: flex;
@@ -570,6 +575,17 @@ button:disabled:hover {
   border-bottom: 1px solid var(--line);
 }
 
+.paneHeader > div {
+  min-width: 0;
+}
+
+.paperActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
 .submissionFilters {
   min-height: 48px;
   padding: 9px 14px;
@@ -594,6 +610,27 @@ button:disabled:hover {
   color: var(--focus);
 }
 
+.submissionSearch {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.submissionSearch input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: var(--text);
+  font: inherit;
+}
+
+.submissionSearch input:focus {
+  border-color: var(--focus);
+  outline: none;
+  box-shadow: 0 0 0 2px #dbe8ff;
+}
+
 .completeToggle {
   display: inline-flex;
   align-items: center;
@@ -610,8 +647,14 @@ button:disabled:hover {
 }
 
 .submissionList {
+  flex: 1 1 auto;
   overflow-y: auto;
-  height: calc(100% - 112px);
+  min-height: 0;
+}
+
+.submissionEmpty {
+  padding: 16px 14px;
+  color: var(--muted);
 }
 
 .submissionItem {
@@ -1003,6 +1046,21 @@ button:disabled:hover {
   .addTrackForm,
   .checklistOptions {
     grid-template-columns: 1fr;
+  }
+
+  .paneHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .paperActions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .paperActions button,
+  .paperActions .pdfLink {
+    flex: 1 1 96px;
   }
 
   .checklistOption {

@@ -88,6 +88,9 @@
           <button type="button" data-filter="finished">Finished</button>
           <button type="button" data-filter="all">All</button>
         </div>
+        <div class="submissionSearch">
+          <input id="submissionSearch" type="search" placeholder="Search paper ID or title" aria-label="Search paper ID or title">
+        </div>
         <div id="submissionList" class="submissionList"></div>
       </aside>
 
@@ -97,7 +100,11 @@
             <h2 id="paperTitle">Select a submission</h2>
             <p id="paperMeta"></p>
           </div>
-          <a id="openPdf" class="pdfLink" href="#" target="_blank" rel="noreferrer">Open PDF</a>
+          <div class="paperActions">
+            <button id="previousPaper" type="button">Previous</button>
+            <button id="nextPaper" type="button">Next</button>
+            <a id="openPdf" class="pdfLink" href="#" target="_blank" rel="noreferrer">Open PDF</a>
+          </div>
         </div>
         <iframe id="pdfViewer" title="Paper PDF"></iframe>
         <div id="pdfUnavailable" class="pdfUnavailable" hidden>
