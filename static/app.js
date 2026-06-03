@@ -31,6 +31,7 @@ let state = {
   submissions: [],
   submissionFilter: "all",
   submissionSearch: "",
+  submissionSearchFocusId: null,
   selectedId: null,
   saveTimer: null,
   pdfLoadToken: 0
@@ -182,6 +183,7 @@ async function openTrack(trackId, reviewId = null) {
   state.submissions = data.submissions;
   state.submissionFilter = "all";
   state.submissionSearch = "";
+  state.submissionSearchFocusId = null;
   els.submissionSearch.value = "";
   const sources = data.sources;
   els.sourceSummary.textContent = `${data.track.name} · ${data.review.label} · Sources: ${sourceSummaryText(sources)}`;
@@ -220,6 +222,7 @@ function showHome() {
   state.submissions = [];
   state.submissionFilter = "all";
   state.submissionSearch = "";
+  state.submissionSearchFocusId = null;
   state.selectedId = null;
   els.submissionSearch.value = "";
   els.sourceSummary.textContent = "";
@@ -652,6 +655,11 @@ async function createTrackFollowUp(event, track, review, button, message) {
 
 function renderSubmissionList() {
   const visibleSubmissions = filteredSubmissions();
+  const query = normalizedSubmissionSearch();
+  const searchMatchIds = new Set(query
+    ? visibleSubmissions.filter(submission => matchesSubmissionSearch(submission, query)).map(submission => submission.id)
+    : []
+  );
   updateSubmissionCount();
   updateSubmissionFilterButtons();
   updatePaperNavControls();
@@ -671,6 +679,8 @@ function renderSubmissionList() {
     button.type = "button";
     button.className = "submissionItem";
     button.classList.toggle("active", submission.id === state.selectedId);
+    button.classList.toggle("searchMatch", searchMatchIds.has(submission.id));
+    button.classList.toggle("searchFocus", query && submission.id === state.submissionSearchFocusId);
     button.dataset.id = submission.id;
     button.addEventListener("click", () => selectSubmission(submission.id));
 
@@ -749,14 +759,17 @@ function updateReviewControls() {
 }
 
 function filteredSubmissions() {
-  const query = state.submissionSearch.trim().toLowerCase();
   if (state.submissionFilter === "open") {
-    return state.submissions.filter(submission => !submission.completed && matchesSubmissionSearch(submission, query));
+    return state.submissions.filter(submission => !submission.completed);
   }
   if (state.submissionFilter === "finished") {
-    return state.submissions.filter(submission => submission.completed && matchesSubmissionSearch(submission, query));
+    return state.submissions.filter(submission => submission.completed);
   }
-  return state.submissions.filter(submission => matchesSubmissionSearch(submission, query));
+  return state.submissions;
+}
+
+function normalizedSubmissionSearch() {
+  return state.submissionSearch.trim().toLowerCase();
 }
 
 function matchesSubmissionSearch(submission, query) {
@@ -769,7 +782,13 @@ function matchesSubmissionSearch(submission, query) {
 
 function updateSubmissionCount() {
   const visibleCount = filteredSubmissions().length;
-  els.submissionCount.textContent = state.submissionFilter === "all" && !state.submissionSearch.trim()
+  const query = normalizedSubmissionSearch();
+  if (query) {
+    const matchCount = filteredSubmissions().filter(submission => matchesSubmissionSearch(submission, query)).length;
+    els.submissionCount.textContent = `${matchCount}/${visibleCount} matches`;
+    return;
+  }
+  els.submissionCount.textContent = state.submissionFilter === "all"
     ? `${state.submissions.length} papers`
     : `${visibleCount}/${state.submissions.length} papers`;
 }
@@ -787,14 +806,16 @@ async function setSubmissionFilter(filter) {
     return;
   }
   state.submissionFilter = filter;
+  updateSubmissionSearchFocus();
   renderSubmissionList();
-  await ensureVisibleSelection();
+  scrollSearchFocusIntoView();
 }
 
 async function setSubmissionSearch(query) {
   state.submissionSearch = query;
+  updateSubmissionSearchFocus();
   renderSubmissionList();
-  await ensureVisibleSelection();
+  scrollSearchFocusIntoView();
 }
 
 function updatePaperNavControls() {
@@ -834,6 +855,61 @@ function scrollSelectedSubmissionIntoView() {
   const selectedItem = Array.from(document.querySelectorAll(".submissionItem"))
     .find(item => item.dataset.id === state.selectedId);
   selectedItem?.scrollIntoView({block: "nearest"});
+}
+
+function updateSubmissionSearchFocus() {
+  const query = normalizedSubmissionSearch();
+  if (!query) {
+    state.submissionSearchFocusId = null;
+    return;
+  }
+  const rankedMatches = filteredSubmissions()
+    .map((submission, index) => ({
+      submission,
+      index,
+      score: submissionSearchScore(submission, query)
+    }))
+    .filter(match => Number.isFinite(match.score))
+    .sort((a, b) => a.score - b.score || a.index - b.index);
+  state.submissionSearchFocusId = rankedMatches[0]?.submission.id || null;
+}
+
+function submissionSearchScore(submission, query) {
+  const id = String(submission.id).toLowerCase();
+  const title = String(submission.title || "").toLowerCase();
+  if (id === query) {
+    return 0;
+  }
+  if (id.startsWith(query)) {
+    return 1;
+  }
+  if (title.startsWith(query)) {
+    return 2;
+  }
+  if (id.includes(query)) {
+    return 3;
+  }
+  if (title.includes(query)) {
+    return 4;
+  }
+  return Infinity;
+}
+
+function scrollSearchFocusIntoView() {
+  if (!state.submissionSearchFocusId) {
+    return;
+  }
+  const focusedItem = Array.from(document.querySelectorAll(".submissionItem"))
+    .find(item => item.dataset.id === state.submissionSearchFocusId);
+  if (!focusedItem) {
+    return;
+  }
+  const listTop = els.submissionList.getBoundingClientRect().top;
+  const itemTop = focusedItem.getBoundingClientRect().top;
+  els.submissionList.scrollBy({
+    top: itemTop - listTop - 12,
+    behavior: "smooth"
+  });
 }
 
 async function ensureVisibleSelection() {

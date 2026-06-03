@@ -680,6 +680,22 @@ button:disabled:hover {
   box-shadow: inset 3px 0 0 var(--focus);
 }
 
+.submissionItem.searchMatch {
+  background: #fff8df;
+}
+
+.submissionItem.searchFocus {
+  box-shadow: inset 3px 0 0 #a65f00;
+}
+
+.submissionItem.active.searchMatch {
+  background: #eef4ff;
+}
+
+.submissionItem.active.searchFocus {
+  box-shadow: inset 3px 0 0 var(--focus);
+}
+
 .submissionTitle {
   display: block;
   font-weight: 700;
