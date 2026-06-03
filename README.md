@@ -19,6 +19,18 @@ The current version is built for proceedings prepared through HotCRP.
 - Rerun checks for the currently selected review round only, with a confirmation that current check results will be overwritten.
 - Export CSV results with one row per paper and checklist items as columns.
 
+## Screenshots
+
+
+### Dashboard overview
+![Track dashboard](docs/screenshots/track-dashboard.png)
+
+### Add a track
+![Add track form](docs/screenshots/add-track.png)
+
+### Paper review page
+![Review paper workspace](docs/screenshots/review-paper.png)
+
 ## Run With Docker
 
 ```sh
