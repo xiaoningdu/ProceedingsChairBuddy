@@ -21,3 +21,6 @@ Settings - LLMSC 2026.html
 
 # Internal planning/requirements notes
 REQUIREMENTS.md
+
+# Local ad hoc tests may contain private proceedings data
+tests/test_checks.py
