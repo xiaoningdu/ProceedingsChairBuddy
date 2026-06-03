@@ -640,11 +640,11 @@ def _looks_like_author_block_boundary(line: str) -> bool:
 
 
 def _author_name_in_pdf_author_region(name: str, author_region: str) -> bool:
-    name_words = _author_name_words(name)
-    region_words = _author_name_words(author_region)
-    if _contains_contiguous_words(name_words, region_words):
+    name_words, name_separators = _author_name_parts(name)
+    region_words, region_separators = _author_name_parts(author_region)
+    if _contains_contiguous_author_name(name_words, name_separators, region_words, region_separators):
         return True
-    return _short_author_name_in_region(name_words, region_words)
+    return _short_author_name_in_region(name_words, name_separators, region_words, region_separators)
 
 
 def _author_name_span_in_line(line: str, name: str) -> Optional[tuple[int, int]]:
@@ -672,17 +672,32 @@ def _title_words_match(expected: str, actual: str) -> bool:
     return _meaningful_words(expected) == _meaningful_words(actual)
 
 
-def _contains_contiguous_words(needle_words: List[str], haystack_words: List[str]) -> bool:
-    if not needle_words:
+def _contains_contiguous_author_name(
+    name_words: List[str],
+    name_separators: List[str],
+    region_words: List[str],
+    region_separators: List[str],
+) -> bool:
+    if not name_words:
         return False
-    limit = len(haystack_words) - len(needle_words) + 1
+    limit = len(region_words) - len(name_words) + 1
     for index in range(max(limit, 0)):
-        if haystack_words[index:index + len(needle_words)] == needle_words:
+        if region_words[index:index + len(name_words)] != name_words:
+            continue
+        if all(
+            name_separators[separator_index] == region_separators[index + separator_index]
+            for separator_index in range(len(name_words) - 1)
+        ):
             return True
     return False
 
 
-def _short_author_name_in_region(name_words: List[str], region_words: List[str]) -> bool:
+def _short_author_name_in_region(
+    name_words: List[str],
+    name_separators: List[str],
+    region_words: List[str],
+    region_separators: List[str],
+) -> bool:
     if len(name_words) != 2:
         return False
     first, last = name_words
@@ -690,9 +705,58 @@ def _short_author_name_in_region(name_words: List[str], region_words: List[str])
     last_positions = [index for index, word in enumerate(region_words) if word == last]
     return any(
         0 < last_index - first_index <= 8
+        and (
+            last_index - first_index > 1
+            or name_separators[0] == region_separators[first_index]
+        )
         for first_index in first_positions
         for last_index in last_positions
     )
+
+
+def _author_name_parts(value: str) -> tuple[List[str], List[str]]:
+    normalized = _normalize_author_name_text(value)
+    tokens = []
+    for match in re.finditer(r"[a-z0-9]+", normalized):
+        word = re.sub(r"(?<=[a-z])[0-9]+$", "", match.group(0))
+        if word and not word.isdigit():
+            tokens.append((word, match.start(), match.end()))
+    words = [token[0] for token in tokens]
+    separators = [
+        _author_name_separator(normalized[tokens[index][2]:tokens[index + 1][1]])
+        for index in range(len(tokens) - 1)
+    ]
+    return words, separators
+
+
+def _normalize_author_name_text(value: str) -> str:
+    value = value.translate(str.maketrans({
+        "⁰": "0",
+        "¹": "1",
+        "²": "2",
+        "³": "3",
+        "⁴": "4",
+        "⁵": "5",
+        "⁶": "6",
+        "⁷": "7",
+        "⁸": "8",
+        "⁹": "9",
+        "‐": "-",
+        "‑": "-",
+        "‒": "-",
+        "–": "-",
+        "—": "-",
+        "−": "-",
+    }))
+    return "".join(
+        character
+        for character in unicodedata.normalize("NFKD", value.lower())
+        if not unicodedata.combining(character)
+    )
+
+
+def _author_name_separator(value: str) -> str:
+    return "hyphen" if "-" in value else "space"
 
 
 def _author_name_words(value: str) -> List[str]:
