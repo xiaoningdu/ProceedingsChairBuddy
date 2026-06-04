@@ -49,7 +49,7 @@ To run without Compose:
 
 ```sh
 docker build -t proceedings-chair-buddy .
-docker run --rm -p 8765:8765 -v "$PWD/proceedings_data:/data" proceedings-chair-buddy
+docker run --rm -p 8765:8765 -v "$PWD/proceedings_data:/app/proceedings_data" proceedings-chair-buddy
 ```
 
 ## Run Locally
@@ -79,12 +79,12 @@ Then open:
 http://127.0.0.1:8765
 ```
 
-By default, local data is written under the project directory:
+By default, local data is read from and written under `proceedings_data/`:
 
-- `tracks.json`
-- `review_state/`
-- `track_data/`
-- `review_assets/`
+- `proceedings_data/tracks.json`
+- `proceedings_data/review_state/`
+- `proceedings_data/track_data/`
+- `proceedings_data/review_assets/`
 
 To store data elsewhere, set `PCB_DATA_DIR`:
 

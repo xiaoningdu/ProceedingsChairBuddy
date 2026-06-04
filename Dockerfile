@@ -9,10 +9,9 @@ COPY . .
 
 ENV PCB_HOST=0.0.0.0
 ENV PCB_PORT=8765
-ENV PCB_DATA_DIR=/data
 ENV PYTHONPYCACHEPREFIX=/tmp/pycache
 
-RUN mkdir -p /data
+RUN mkdir -p /app/proceedings_data
 
 EXPOSE 8765
 

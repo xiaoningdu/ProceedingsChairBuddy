@@ -6,4 +6,4 @@ services:
     ports:
       - "8765:8765"
     volumes:
-      - ./proceedings_data:/data
+      - ./proceedings_data:/app/proceedings_data

@@ -19,7 +19,7 @@ from proceeding_chair_app.parsers import ensure_sample_pdfs, load_eright, load_h
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
-DATA_DIR = Path(os.environ.get("PCB_DATA_DIR", ROOT)).resolve()
+DATA_DIR = Path(os.environ.get("PCB_DATA_DIR", ROOT / "proceedings_data")).resolve()
 TRACKS_PATH = DATA_DIR / "tracks.json"
 STATE_DIR = DATA_DIR / "review_state"
 REVIEW_ASSETS_DIR = DATA_DIR / "review_assets"
