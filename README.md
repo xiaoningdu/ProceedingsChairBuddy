@@ -4,12 +4,12 @@ Proceedings Chair Buddy is a local web app for proceedings chairs who need to re
 
 This tool is intended to facilitate proceedings chairs, not replace them. It brings the main checking sources into a one-stop review experience and automates checks where the source data supports it, but responsibility for camera-ready quality remains with the chairs unless the proceedings-chair role no longer exists for the venue. Chairs should treat automated results as review aids and apply their own judgment before accepting final papers.
 
-The current version is built for proceedings prepared through HotCRP.
+The current version is built for ACM proceedings prepared through HotCRP.
 
 ## Features
 
 - Manage multiple tracks from a single home page.
-- Add each track from a ZIP of final-version PDFs, TOC XML, HotCRP ACM HTML export, and optional ACM e-Right HTML.
+- Add each track from a ZIP of final-version PDFs, TOC XML, HotCRP ACM HTML export, and optional ACM Proceedings List page with paper details expanded.
 - Choose which checklist items apply when adding a track.
 - Review each paper with the PDF, metadata, issue summary, and editable checklist side by side.
 - Save per-paper finished/open state, checklist result overrides, and edited comments.
@@ -30,6 +30,9 @@ The current version is built for proceedings prepared through HotCRP.
 
 ### Paper review page
 ![Review paper workspace](docs/screenshots/review-paper.png)
+
+### Create a follow-up review for issues from last round
+![Create follow-up review form](docs/screenshots/create-follow-up.png)
 
 ## Run With Docker
 
