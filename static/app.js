@@ -451,7 +451,7 @@ function createFollowUpForm(track, review) {
     fileField("zip", "Updated ZIP", ".zip,application/zip"),
     fileField("xml", "Updated TOC XML", ".xml,text/xml,application/xml"),
     fileField("html", "Updated HotCRP HTML", ".html,.htm,text/html"),
-    fileField("copyright_html", "Updated e-Right HTML", ".html,.htm,text/html")
+    fileField("copyright_html", "Updated e-Right HTML (optional)", ".html,.htm,text/html")
   );
 
   const actions = document.createElement("span");
