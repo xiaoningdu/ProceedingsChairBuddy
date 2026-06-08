@@ -25,6 +25,7 @@ const RETIRED_CHECKLIST_IDS = new Set(["pdf_copyright_isbn"]);
 let state = {
   tracks: [],
   checklistItems: DEFAULT_CHECKLIST_ITEMS,
+  trackSort: "date",
   currentTrack: null,
   currentReview: null,
   reviews: [],
@@ -40,6 +41,7 @@ let state = {
 const els = {
   homeView: document.querySelector("#homeView"),
   reviewView: document.querySelector("#reviewView"),
+  trackSortButtons: document.querySelector("#trackSortButtons"),
   trackList: document.querySelector("#trackList"),
   addTrackForm: document.querySelector("#addTrackForm"),
   addTrackMessage: document.querySelector("#addTrackMessage"),
@@ -237,7 +239,8 @@ function showHome() {
 }
 
 function renderTrackList() {
-  els.trackList.replaceChildren(...state.tracks.map(track => {
+  updateTrackSortButtons();
+  els.trackList.replaceChildren(...orderedTracks().map(track => {
     const card = document.createElement("article");
     card.className = "trackCard";
 
@@ -265,6 +268,47 @@ function renderTrackList() {
     card.append(header, reviewPanels);
     return card;
   }));
+}
+
+function orderedTracks() {
+  const tracks = state.tracks.map((track, index) => ({track, index}));
+  if (state.trackSort === "name") {
+    tracks.sort((a, b) => {
+      const nameComparison = String(a.track.name || "").localeCompare(String(b.track.name || ""), undefined, {sensitivity: "base"});
+      return nameComparison || a.index - b.index;
+    });
+  } else if (state.trackSort === "needs_follow_up") {
+    tracks.sort((a, b) => {
+      const aNeeds = trackNeedsFollowUp(a.track) ? 1 : 0;
+      const bNeeds = trackNeedsFollowUp(b.track) ? 1 : 0;
+      if (aNeeds !== bNeeds) {
+        return bNeeds - aNeeds;
+      }
+      return followUpIssueCount(b.track) - followUpIssueCount(a.track) || a.index - b.index;
+    });
+  }
+  return tracks.map(item => item.track);
+}
+
+function updateTrackSortButtons() {
+  els.trackSortButtons.querySelectorAll("button[data-sort]").forEach(button => {
+    const isActive = button.dataset.sort === state.trackSort;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function trackNeedsFollowUp(track) {
+  return followUpIssueCount(track) > 0;
+}
+
+function followUpIssueCount(track) {
+  return (track.reviews || []).reduce((total, review) => {
+    if ((review.child_count || 0) > 0) {
+      return total;
+    }
+    return total + (review.issue_paper_count || 0);
+  }, 0);
 }
 
 function createReviewPanel(track, review) {
@@ -300,6 +344,7 @@ function createReviewPanel(track, review) {
   if (review.locked || review.child_count) {
     badges.append(badge("manual", "locked"));
   }
+  const hasFollowUp = Boolean(review && review.child_count);
 
   const actions = document.createElement("div");
   actions.className = "followUpActions";
@@ -314,12 +359,15 @@ function createReviewPanel(track, review) {
   updateButton.type = "button";
   updateButton.className = "panelActionButton";
   updateButton.textContent = "Update files";
+  updateButton.disabled = hasFollowUp;
+  updateButton.title = hasFollowUp
+    ? "This review is locked because it already has a follow-up."
+    : "Replace files for this review round.";
 
   const createButton = document.createElement("button");
   createButton.type = "button";
   createButton.className = "panelActionButton";
   createButton.textContent = "Create follow-up";
-  const hasFollowUp = Boolean(review && review.child_count);
   createButton.disabled = !(review && review.issue_paper_count) || hasFollowUp;
   createButton.title = hasFollowUp
     ? "This review already has a follow-up."
@@ -342,6 +390,9 @@ function createReviewPanel(track, review) {
 
   if (!review.parent_id) {
     updateButton.addEventListener("click", () => {
+      if (updateButton.disabled) {
+        return;
+      }
       const willOpen = updatePanel.hidden;
       updatePanel.hidden = !willOpen;
       updateButton.classList.toggle("active", !updatePanel.hidden);
@@ -397,14 +448,11 @@ function createFollowUpForm(track, review) {
   uploadPanel.className = "followUpUploadPanel";
   uploadPanel.hidden = true;
   uploadPanel.append(
-    fileField("zip", "ZIP", ".zip,application/zip"),
-    fileField("xml", "TOC XML", ".xml,text/xml,application/xml"),
-    fileField("html", "HotCRP HTML", ".html,.htm,text/html"),
-    fileField("copyright_html", "e-Right HTML", ".html,.htm,text/html")
+    fileField("zip", "Updated ZIP", ".zip,application/zip"),
+    fileField("xml", "Updated TOC XML", ".xml,text/xml,application/xml"),
+    fileField("html", "Updated HotCRP HTML", ".html,.htm,text/html"),
+    fileField("copyright_html", "Updated e-Right HTML", ".html,.htm,text/html")
   );
-  uploadPanel.querySelectorAll('input[name="zip"], input[name="xml"], input[name="html"]').forEach(input => {
-    input.required = true;
-  });
 
   const actions = document.createElement("span");
   actions.className = "followUpActions";
@@ -432,7 +480,7 @@ function createUpdateReviewPanel(track, review) {
   if (!review.parent_id) {
     const warning = document.createElement("p");
     warning.className = "warningText";
-    warning.textContent = "Updating the initial review files will remove all existing follow-up panels for this track.";
+    warning.textContent = "Updating files will rerun checks for this review round.";
     form.append(warning);
   }
 
@@ -480,11 +528,9 @@ async function updateReviewFiles(event, track, review, message) {
     message.textContent = "Select at least one file to update.";
     return;
   }
-  if (!review.parent_id && review.child_count) {
-    const confirmed = confirm("Updating the initial review files will delete all existing follow-up panels for this track. Continue?");
-    if (!confirmed) {
-      return;
-    }
+  if (review.child_count) {
+    message.textContent = "This review is locked because it already has a follow-up.";
+    return;
   }
 
   message.textContent = "Updating...";
@@ -624,14 +670,12 @@ async function createTrackFollowUp(event, track, review, button, message) {
     return;
   }
   const form = event.currentTarget;
-  const zip = form.querySelector('input[name="zip"]');
-  const xml = form.querySelector('input[name="xml"]');
-  const html = form.querySelector('input[name="html"]');
-  if (!zip?.files?.length || !xml?.files?.length || !html?.files?.length) {
-    message.textContent = "Upload ZIP, XML, and HotCRP HTML before creating the follow-up.";
+  const formData = new FormData(form);
+  const hasUpload = [...formData.values()].some(value => value instanceof File && value.name);
+  if (!hasUpload) {
+    message.textContent = "Select at least one updated file. Other files will be reused from the selected review.";
     return;
   }
-  const formData = new FormData(form);
   button.disabled = true;
   message.textContent = "Creating follow-up...";
   try {
@@ -762,6 +806,9 @@ function filteredSubmissions() {
   if (state.submissionFilter === "open") {
     return state.submissions.filter(submission => !submission.completed);
   }
+  if (state.submissionFilter === "issues") {
+    return state.submissions.filter(submission => (submission.status_counts?.issue || 0) > 0);
+  }
   if (state.submissionFilter === "finished") {
     return state.submissions.filter(submission => submission.completed);
   }
@@ -802,7 +849,7 @@ function updateSubmissionFilterButtons() {
 }
 
 async function setSubmissionFilter(filter) {
-  if (!["open", "finished", "all"].includes(filter)) {
+  if (!["open", "issues", "finished", "all"].includes(filter)) {
     return;
   }
   state.submissionFilter = filter;
@@ -1136,7 +1183,7 @@ function renderIssueSummary(checks) {
       const labelEl = document.createElement("strong");
       labelEl.textContent = check.label;
       const evidence = document.createElement("span");
-      evidence.textContent = `: ${check.evidence}`;
+      evidence.textContent = `: ${followUpEvidenceText(check)}`;
       item.append(comparisonBadge(kind), document.createTextNode(" "), labelEl, evidence);
       return item;
     }));
@@ -1145,6 +1192,31 @@ function renderIssueSummary(checks) {
   }
 
   els.issueSummary.replaceChildren(heading, summary, ...sections);
+}
+
+function previousRoundOtherIssuesMessage(check) {
+  if (
+    check.id !== "proceeding_messages"
+    || !["fixed", "still_present"].includes(check.comparison)
+    || !check.baseline_evidence
+  ) {
+    return "";
+  }
+  return check.baseline_evidence;
+}
+
+function followUpEvidenceText(check) {
+  const previousMessage = previousRoundOtherIssuesMessage(check);
+  if (!previousMessage) {
+    return check.evidence || "";
+  }
+  if (check.comparison === "fixed") {
+    return `Previous: ${previousMessage}`;
+  }
+  if (!check.evidence || check.evidence === previousMessage) {
+    return `Previous/current: ${previousMessage}`;
+  }
+  return `Previous: ${previousMessage}; Current: ${check.evidence}`;
 }
 
 function renderChecks(checks) {
@@ -1227,6 +1299,13 @@ function renderChecks(checks) {
       note.className = "checkNote";
       note.textContent = `Note: ${check.note}`;
       footer.append(note);
+    }
+    const previousMessage = previousRoundOtherIssuesMessage(check);
+    if (previousMessage) {
+      const previousNote = document.createElement("div");
+      previousNote.className = "checkNote";
+      previousNote.textContent = `Previous round: ${previousMessage}`;
+      footer.append(previousNote);
     }
 
     header.append(titleWrap, status);
@@ -1472,6 +1551,14 @@ els.backToTracks.addEventListener("click", async () => {
 els.rerunChecks.addEventListener("click", rerunChecks);
 els.markAllFinished.addEventListener("click", markAllFinished);
 els.exportCsv.addEventListener("click", exportCsv);
+els.trackSortButtons.addEventListener("click", event => {
+  const button = event.target.closest("button[data-sort]");
+  if (!button) {
+    return;
+  }
+  state.trackSort = button.dataset.sort;
+  renderTrackList();
+});
 els.addTrackForm.addEventListener("submit", addTrack);
 els.addTrackForm.addEventListener("reset", () => setTimeout(syncSelectAllChecks, 0));
 els.selectAllChecks.addEventListener("change", () => {

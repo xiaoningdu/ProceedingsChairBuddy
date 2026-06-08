@@ -313,9 +313,9 @@ def load_eright(path: Path) -> Dict[str, CopyrightPaper]:
     return papers
 
 
-def ensure_sample_pdfs(zip_path: Path, output_dir: Path) -> None:
+def ensure_sample_pdfs(zip_path: Path, output_dir: Path, force: bool = False) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    if any(output_dir.glob("*.pdf")):
+    if not force and any(output_dir.glob("*.pdf")):
         return
     with zipfile.ZipFile(zip_path) as archive:
         archive.extractall(output_dir)

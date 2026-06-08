@@ -370,6 +370,18 @@ def _resolve_review_source_path(source: str, key: str) -> Path:
     return Path(source) if Path(source).is_absolute() else DATA_DIR / source
 
 
+def _copy_existing_review_pdfs(sources: dict, target_dir: Path) -> None:
+    source = sources.get("pdf_dir")
+    if not source:
+        return
+    source_dir = _resolve_review_source_path(source, "pdf_dir")
+    if not source_dir.exists() or not source_dir.is_dir():
+        return
+    if source_dir.resolve() == target_dir.resolve():
+        return
+    shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
+
+
 def _snapshot_review_sources(track_id: str, review_id: str, sources: dict, files: dict) -> dict:
     asset_dir = _review_asset_dir(track_id, review_id)
     input_dir = asset_dir / "inputs"
@@ -419,7 +431,8 @@ def _snapshot_review_sources(track_id: str, review_id: str, sources: dict, files
     if zip_replaced:
         shutil.rmtree(pdf_dir, ignore_errors=True)
         pdf_dir.mkdir(parents=True, exist_ok=True)
-    ensure_sample_pdfs(zip_source, pdf_dir)
+        _copy_existing_review_pdfs(sources, pdf_dir)
+    ensure_sample_pdfs(zip_source, pdf_dir, force=zip_replaced)
     snapshot["pdf_dir"] = _relative_path(pdf_dir)
     return snapshot
 
@@ -902,6 +915,8 @@ def update_review_files(track_id: str, review_id: str, files: dict) -> dict:
         raise KeyError(track_id)
     state = load_track_state(track_id)
     review = _review_or_default(state, review_id)
+    if review.get("children"):
+        raise ValueError("This review is locked because it already has a follow-up.")
     deleted_review_ids = []
     if not review.get("parent_id"):
         for child_id in list(review.get("children", [])):

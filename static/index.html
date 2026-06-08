@@ -27,8 +27,10 @@
 
     <main id="homeView" class="homeView">
       <section class="trackOverview">
-        <h2>Tracks</h2>
-        <p>Review progress is saved locally and can be resumed later.</p>
+        <div class="trackOverviewHeader">
+          <h2>Tracks</h2>
+          <p>Review progress is saved locally and can be resumed later.</p>
+        </div>
         <details class="addTrackPanel">
           <summary>Add track</summary>
           <form id="addTrackForm" class="addTrackForm" enctype="multipart/form-data">
@@ -73,6 +75,14 @@
             </div>
           </form>
         </details>
+        <div class="trackSortControl">
+          <span>Order by</span>
+          <div id="trackSortButtons" class="trackSortButtons" aria-label="Order tracks">
+            <button type="button" data-sort="date">Date</button>
+            <button type="button" data-sort="name">Name</button>
+            <button type="button" data-sort="needs_follow_up">Needs follow-up</button>
+          </div>
+        </div>
         <div id="trackList" class="trackList"></div>
       </section>
     </main>
@@ -85,6 +95,7 @@
         </div>
         <div id="submissionFilters" class="submissionFilters" aria-label="Filter submissions">
           <button type="button" data-filter="open">Open</button>
+          <button type="button" data-filter="issues">Issues</button>
           <button type="button" data-filter="finished">Finished</button>
           <button type="button" data-filter="all">All</button>
         </div>

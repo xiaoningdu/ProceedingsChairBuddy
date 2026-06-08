@@ -160,9 +160,43 @@ button:disabled:hover {
   margin: 0 auto;
 }
 
+.trackOverviewHeader {
+  display: grid;
+  gap: 4px;
+}
+
 .trackOverview h2 {
   font-size: 18px;
   margin-bottom: 4px;
+}
+
+.trackSortControl {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.trackSortButtons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.trackSortButtons button {
+  min-height: 34px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.trackSortButtons button.active {
+  border-color: var(--focus);
+  background: #eef4ff;
+  color: var(--focus);
 }
 
 .trackList {
